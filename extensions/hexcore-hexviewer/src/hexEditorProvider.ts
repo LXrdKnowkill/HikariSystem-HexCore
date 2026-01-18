@@ -5,13 +5,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import * as fs from 'fs';
 
 export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<HexDocument> {
 
 	public static readonly viewType = 'hexcore.hexEditor';
-
-	private readonly _onDidChangeCustomDocument = new vscode.EventEmitter<vscode.CustomDocumentContentChangeEvent<HexDocument>>();
-	public readonly onDidChangeCustomDocument = this._onDidChangeCustomDocument.event;
 
 	constructor(private readonly context: vscode.ExtensionContext) { }
 
@@ -34,8 +32,8 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 		_openContext: vscode.CustomDocumentOpenContext,
 		_token: vscode.CancellationToken
 	): Promise<HexDocument> {
-		const data = await vscode.workspace.fs.readFile(uri);
-		return new HexDocument(uri, data);
+		const stat = await vscode.workspace.fs.stat(uri);
+		return new HexDocument(uri, stat.size);
 	}
 
 	async resolveCustomEditor(
@@ -49,22 +47,57 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 
 		webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview, document);
 
-		// Handle messages from webview
-		webviewPanel.webview.onDidReceiveMessage(message => {
+		webviewPanel.webview.onDidReceiveMessage(async message => {
 			switch (message.type) {
 				case 'ready':
 					webviewPanel.webview.postMessage({
-						type: 'setData',
-						data: Array.from(document.data),
+						type: 'init',
+						fileSize: document.fileSize,
 						fileName: document.uri.fsPath
 					});
 					break;
+
+				case 'requestData':
+					try {
+						const { offset, length } = message;
+						const data = await this.readChunk(document.uri, offset, length);
+						webviewPanel.webview.postMessage({
+							type: 'chunkData',
+							offset: offset,
+							data: Array.from(data)
+						});
+					} catch (e) {
+						vscode.window.showErrorMessage('Failed to read file chunk: ' + e);
+					}
+					break;
+
 				case 'copyToClipboard':
 					vscode.env.clipboard.writeText(message.text);
 					vscode.window.showInformationMessage('Copied to clipboard');
 					break;
 			}
 		});
+	}
+
+	private async readChunk(uri: vscode.Uri, offset: number, length: number): Promise<Uint8Array> {
+		// Using Node fs for local files for performance random access
+		if (uri.scheme === 'file') {
+			return new Promise((resolve, reject) => {
+				fs.open(uri.fsPath, 'r', (err, fd) => {
+					if (err) return reject(err);
+					const buffer = Buffer.alloc(length);
+					fs.read(fd, buffer, 0, length, offset, (err, bytesRead) => {
+						fs.close(fd, () => { });
+						if (err) return reject(err);
+						resolve(buffer.slice(0, bytesRead));
+					});
+				});
+			});
+		} else {
+			// Fallback for non-local schemes (slower, reads full file usually, but API constrained)
+			const allData = await vscode.workspace.fs.readFile(uri);
+			return allData.slice(offset, offset + length);
+		}
 	}
 
 	private getHtmlForWebview(webview: vscode.Webview, document: HexDocument): string {
@@ -82,326 +115,234 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 	<title>Hex Viewer</title>
 	<style>
 		:root {
-			--bg-primary: #1e1e2e;
-			--bg-secondary: #181825;
-			--bg-hover: #313244;
-			--text-primary: #cdd6f4;
-			--text-secondary: #a6adc8;
-			--text-muted: #6c7086;
-			--accent: #cba6f7;
-			--accent-dim: #9366b4;
-			--border: #45475a;
-			--offset-color: #89b4fa;
-			--hex-color: #f5c2e7;
-			--ascii-color: #a6e3a1;
-			--highlight: rgba(203, 166, 247, 0.3);
+			--font-mono: 'Consolas', 'Courier New', monospace;
+			--row-height: 24px;
 		}
 
-		* {
-			margin: 0;
-			padding: 0;
-			box-sizing: border-box;
-		}
+		* { margin: 0; padding: 0; box-sizing: border-box; }
 
 		body {
-			font-family: 'Consolas', 'Courier New', monospace;
-			background-color: var(--bg-primary);
-			color: var(--text-primary);
+			font-family: var(--font-mono);
+			background-color: var(--vscode-editor-background);
+			color: var(--vscode-editor-foreground);
 			padding: 0;
 			overflow: hidden;
+			font-size: 13px;
+			user-select: none;
 		}
 
+		/* Toolbar */
 		.toolbar {
 			display: flex;
 			align-items: center;
 			gap: 16px;
-			padding: 12px 16px;
-			background: var(--bg-secondary);
-			border-bottom: 1px solid var(--border);
-			position: sticky;
-			top: 0;
-			z-index: 100;
+			padding: 8px 16px;
+			background: var(--vscode-editor-background);
+			border-bottom: 1px solid var(--vscode-panel-border);
+			height: 40px;
 		}
 
-		.toolbar-group {
+		.toolbar-item {
 			display: flex;
 			align-items: center;
 			gap: 8px;
-		}
-
-		.toolbar-label {
-			color: var(--text-muted);
 			font-size: 12px;
 		}
 
-		.toolbar-value {
-			color: var(--accent);
-			font-size: 12px;
-			font-weight: bold;
-		}
+		.label { color: var(--vscode-descriptionForeground); }
+		.value { color: var(--vscode-textLink-foreground); font-weight: bold; }
+		.divider { width: 1px; height: 16px; background: var(--vscode-panel-border); }
 
-		.toolbar-divider {
-			width: 1px;
-			height: 24px;
-			background: var(--border);
-		}
-
-		.search-box {
-			display: flex;
-			align-items: center;
-			gap: 8px;
-			margin-left: auto;
-		}
-
-		.search-box input {
-			background: var(--bg-primary);
-			border: 1px solid var(--border);
-			color: var(--text-primary);
-			padding: 6px 12px;
-			border-radius: 4px;
-			font-family: inherit;
-			font-size: 12px;
-			width: 200px;
-		}
-
-		.search-box input:focus {
-			outline: none;
-			border-color: var(--accent);
-		}
-
-		.search-box input::placeholder {
-			color: var(--text-muted);
-		}
-
-		.btn {
-			background: var(--accent-dim);
-			color: var(--bg-primary);
-			border: none;
-			padding: 6px 12px;
-			border-radius: 4px;
-			cursor: pointer;
-			font-size: 12px;
-			font-weight: bold;
-			transition: background 0.2s;
-		}
-
-		.btn:hover {
-			background: var(--accent);
-		}
-
+		/* Main Layout */
 		.container {
 			display: flex;
-			height: calc(100vh - 50px);
+			height: calc(100vh - 40px);
 		}
 
-		.hex-view {
+		/* Virtual Scroll Area */
+		.hex-view-container {
 			flex: 1;
-			overflow: auto;
-			padding: 16px;
+			position: relative;
+			overflow-y: auto;
+			overflow-x: hidden;
+			outline: none;
 		}
 
-		.hex-table {
-			font-size: 13px;
-			line-height: 1.6;
+		.phantom-spacer {
+			position: absolute;
+			top: 0;
+			left: 0;
+			width: 1px;
+			visibility: hidden;
+		}
+
+		.content-layer {
+			position: absolute;
+			top: 0;
+			left: 0;
+			width: 100%;
+			will-change: transform;
 		}
 
 		.hex-row {
+			height: var(--row-height);
 			display: flex;
 			align-items: center;
+			padding: 0 10px;
 		}
 
-		.hex-row:hover {
-			background: var(--bg-hover);
+		.hex-row:hover { background-color: var(--vscode-list-hoverBackground); }
+
+		.offset-col {
+			color: var(--vscode-editorLineNumber-foreground);
+			width: 90px;
+			flex-shrink: 0;
 		}
 
-		.offset {
-			color: var(--offset-color);
-			min-width: 80px;
-			user-select: none;
-		}
-
-		.hex-bytes {
+		.bytes-col {
 			display: flex;
 			gap: 4px;
-			margin: 0 16px;
+			margin-left: 20px;
+			font-family: var(--font-mono);
 		}
 
-		.hex-byte {
-			width: 22px;
+		.byte {
+			display: inline-block;
+			width: 2.2ch;
 			text-align: center;
-			color: var(--hex-color);
-			cursor: pointer;
+			color: var(--vscode-editor-foreground);
+			cursor: default;
 			border-radius: 2px;
 		}
+		.byte.null { color: var(--vscode-descriptionForeground); opacity: 0.5; }
+		.byte:hover { background-color: var(--vscode-editor-selectionBackground); }
+		.byte.selected { background-color: var(--vscode-editor-selectionBackground); color: var(--vscode-editor-selectionForeground); }
 
-		.hex-byte:hover {
-			background: var(--highlight);
+		.ascii-col {
+			margin-left: 30px;
+			border-left: 1px solid var(--vscode-panel-border);
+			padding-left: 10px;
+			display: flex;
 		}
-
-		.hex-byte.selected {
-			background: var(--accent);
-			color: var(--bg-primary);
+		.char {
+			width: 1ch;
+			text-align: center;
 		}
+		.char.selected { background-color: var(--vscode-editor-selectionBackground); color: var(--vscode-editor-selectionForeground); }
+		.char.non-print { color: var(--vscode-descriptionForeground); opacity: 0.5; }
 
-		.hex-byte.null {
-			color: var(--text-muted);
-		}
-
-		.ascii {
-			color: var(--ascii-color);
-			border-left: 1px solid var(--border);
-			padding-left: 16px;
-			letter-spacing: 1px;
-		}
-
-		.ascii-char {
-			cursor: pointer;
-		}
-
-		.ascii-char:hover {
-			background: var(--highlight);
-		}
-
-		.ascii-char.non-printable {
-			color: var(--text-muted);
-		}
-
+		/* Sidebar / Data Inspector */
 		.sidebar {
 			width: 280px;
-			background: var(--bg-secondary);
-			border-left: 1px solid var(--border);
+			background-color: var(--vscode-sideBar-background);
+			border-left: 1px solid var(--vscode-panel-border);
 			padding: 16px;
 			overflow-y: auto;
-		}
-
-		.sidebar h3 {
-			color: var(--accent);
-			font-size: 14px;
-			margin-bottom: 12px;
-			padding-bottom: 8px;
-			border-bottom: 1px solid var(--border);
-		}
-
-		.info-row {
 			display: flex;
-			justify-content: space-between;
-			padding: 6px 0;
+			flex-direction: column;
+			gap: 20px;
+		}
+
+		.section-header {
+			text-transform: uppercase;
+			font-size: 11px;
+			font-weight: bold;
+			color: var(--vscode-sideBarTitle-foreground);
+			border-bottom: 1px solid var(--vscode-panel-border);
+			padding-bottom: 4px;
+			margin-bottom: 8px;
+		}
+
+		.data-grid {
+			display: grid;
+			grid-template-columns: 70px 1fr;
+			gap: 6px;
 			font-size: 12px;
 		}
 
-		.info-label {
-			color: var(--text-muted);
+		.data-label { color: var(--vscode-descriptionForeground); text-align: right; padding-right: 8px; }
+		.data-value {
+			font-family: var(--font-mono);
+			color: var(--vscode-editor-foreground);
+			user-select: text;
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
 		}
 
-		.info-value {
-			color: var(--text-primary);
-			font-weight: bold;
-		}
-
-		.selection-info {
-			margin-top: 16px;
-		}
-
-		.copy-buttons {
+		.endian-toggle {
 			display: flex;
-			flex-direction: column;
 			gap: 8px;
-			margin-top: 16px;
+			margin-bottom: 12px;
 		}
-
-		.copy-btn {
-			width: 100%;
-			text-align: left;
-			padding: 8px 12px;
+		.endian-btn {
+			padding: 4px 8px;
+			font-size: 11px;
+			background: var(--vscode-button-secondaryBackground);
+			color: var(--vscode-button-secondaryForeground);
+			border: 1px solid var(--vscode-panel-border);
+			cursor: pointer;
+			border-radius: 3px;
 		}
-
-		.loading {
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			height: 100%;
-			color: var(--text-muted);
-		}
-
-		.loading-spinner {
-			width: 40px;
-			height: 40px;
-			border: 3px solid var(--border);
-			border-top-color: var(--accent);
-			border-radius: 50%;
-			animation: spin 1s linear infinite;
-			margin-right: 16px;
-		}
-
-		@keyframes spin {
-			to { transform: rotate(360deg); }
+		.endian-btn.active {
+			background: var(--vscode-button-background);
+			color: var(--vscode-button-foreground);
 		}
 	</style>
 </head>
 <body>
 	<div class="toolbar">
-		<div class="toolbar-group">
-			<span class="toolbar-label">File:</span>
-			<span class="toolbar-value" id="fileName">Loading...</span>
+		<div class="toolbar-item">
+			<span class="label">FILE:</span>
+			<span class="value" id="fileName">-</span>
 		</div>
-		<div class="toolbar-divider"></div>
-		<div class="toolbar-group">
-			<span class="toolbar-label">Size:</span>
-			<span class="toolbar-value" id="fileSize">-</span>
+		<div class="divider"></div>
+		<div class="toolbar-item">
+			<span class="label">SIZE:</span>
+			<span class="value" id="fileSize">-</span>
 		</div>
-		<div class="toolbar-divider"></div>
-		<div class="toolbar-group">
-			<span class="toolbar-label">Offset:</span>
-			<span class="toolbar-value" id="currentOffset">0x00000000</span>
-		</div>
-		<div class="search-box">
-			<input type="text" id="searchInput" placeholder="Search hex pattern (e.g., 4D 5A)">
-			<button class="btn" id="searchBtn">Search</button>
+		<div class="divider"></div>
+		<div class="toolbar-item">
+			<span class="label">OFFSET:</span>
+			<span class="value" id="cursorOffset">0x00000000</span>
 		</div>
 	</div>
 
 	<div class="container">
-		<div class="hex-view" id="hexView">
-			<div class="loading">
-				<div class="loading-spinner"></div>
-				<span>Loading file...</span>
-			</div>
+		<div class="hex-view-container" id="scrollContainer" tabindex="0">
+			<div class="phantom-spacer" id="phantomSpacer"></div>
+			<div class="content-layer" id="contentLayer"></div>
 		</div>
 
 		<div class="sidebar">
-			<h3>File Information</h3>
-			<div class="info-row">
-				<span class="info-label">Total Bytes</span>
-				<span class="info-value" id="totalBytes">-</span>
-			</div>
-			<div class="info-row">
-				<span class="info-label">MD5</span>
-				<span class="info-value" id="md5Hash">-</span>
-			</div>
-			<div class="info-row">
-				<span class="info-label">SHA256</span>
-				<span class="info-value" id="sha256Hash" style="font-size: 10px; word-break: break-all;">-</span>
+			<div>
+				<div class="section-header">Data Inspector</div>
+				<div class="endian-toggle">
+					<button class="endian-btn active" id="btnLE">Little Endian</button>
+					<button class="endian-btn" id="btnBE">Big Endian</button>
+				</div>
+				<div class="data-grid" id="dataInspector">
+					<div class="data-label">Int8</div><div class="data-value" id="valInt8">-</div>
+					<div class="data-label">UInt8</div><div class="data-value" id="valUInt8">-</div>
+					<div class="data-label">Int16</div><div class="data-value" id="valInt16">-</div>
+					<div class="data-label">UInt16</div><div class="data-value" id="valUInt16">-</div>
+					<div class="data-label">Int32</div><div class="data-value" id="valInt32">-</div>
+					<div class="data-label">UInt32</div><div class="data-value" id="valUInt32">-</div>
+					<div class="data-label">Int64</div><div class="data-value" id="valInt64">-</div>
+					<div class="data-label">UInt64</div><div class="data-value" id="valUInt64">-</div>
+					<div class="data-label">Float32</div><div class="data-value" id="valFloat32">-</div>
+					<div class="data-label">Float64</div><div class="data-value" id="valFloat64">-</div>
+					<div class="data-label">Binary</div><div class="data-value" id="valBinary">-</div>
+					<div class="data-label">Unix Time</div><div class="data-value" id="valUnixTime">-</div>
+				</div>
 			</div>
 
-			<div class="selection-info">
-				<h3>Selection</h3>
-				<div class="info-row">
-					<span class="info-label">Start</span>
-					<span class="info-value" id="selStart">-</span>
-				</div>
-				<div class="info-row">
-					<span class="info-label">End</span>
-					<span class="info-value" id="selEnd">-</span>
-				</div>
-				<div class="info-row">
-					<span class="info-label">Length</span>
-					<span class="info-value" id="selLength">-</span>
-				</div>
-
-				<div class="copy-buttons">
-					<button class="btn copy-btn" id="copyHex">Copy as Hex</button>
-					<button class="btn copy-btn" id="copyC">Copy as C Array</button>
-					<button class="btn copy-btn" id="copyPython">Copy as Python</button>
+			<div>
+				<div class="section-header">Selection</div>
+				<div class="data-grid">
+					<div class="data-label">Start</div><div class="data-value" id="selStart">-</div>
+					<div class="data-label">End</div><div class="data-value" id="selEnd">-</div>
+					<div class="data-label">Length</div><div class="data-value" id="selLen">-</div>
 				</div>
 			</div>
 		</div>
@@ -409,227 +350,342 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 
 	<script>
 		const vscode = acquireVsCodeApi();
+
+		// Configuration
 		const BYTES_PER_ROW = ${bytesPerRow};
-		const SHOW_ASCII = ${showAscii};
+		const ROW_HEIGHT = 24;
 		const UPPERCASE = ${uppercase};
+		const SHOW_ASCII = ${showAscii};
+		const CHUNK_SIZE = 8192; // 8KB chunks for better performance
 
-		let fileData = [];
-		let selectedStart = -1;
-		let selectedEnd = -1;
+		// State
+		let totalFileSize = 0;
+		let totalRows = 0;
+		let cachedChunks = new Map(); // offset -> Uint8Array
+		let pendingRequests = new Set(); // Track in-flight requests
+		let selection = { start: -1, end: -1 };
+		let littleEndian = true;
 
-		// Notify extension we're ready
+		const scrollContainer = document.getElementById('scrollContainer');
+		const phantomSpacer = document.getElementById('phantomSpacer');
+		const contentLayer = document.getElementById('contentLayer');
+
+		// Endian toggle buttons
+		document.getElementById('btnLE').addEventListener('click', () => {
+			littleEndian = true;
+			document.getElementById('btnLE').classList.add('active');
+			document.getElementById('btnBE').classList.remove('active');
+			updateInspector();
+		});
+
+		document.getElementById('btnBE').addEventListener('click', () => {
+			littleEndian = false;
+			document.getElementById('btnBE').classList.add('active');
+			document.getElementById('btnLE').classList.remove('active');
+			updateInspector();
+		});
+
+		// Initialization
 		vscode.postMessage({ type: 'ready' });
 
-		// Handle messages from extension
-		window.addEventListener('message', event => {
-			const message = event.data;
-			switch (message.type) {
-				case 'setData':
-					fileData = message.data;
-					document.getElementById('fileName').textContent = message.fileName.split(/[\\/]/).pop();
-					renderHexView();
-					updateFileInfo();
+		window.addEventListener('message', e => {
+			const msg = e.data;
+			switch (msg.type) {
+				case 'init':
+					totalFileSize = msg.fileSize;
+					totalRows = Math.ceil(totalFileSize / BYTES_PER_ROW);
+					document.getElementById('fileName').textContent = msg.fileName.split(/[\\\\/]/).pop();
+					document.getElementById('fileSize').textContent = formatBytes(totalFileSize);
+
+					// Setup virtual scroll phantom height
+					phantomSpacer.style.height = (totalRows * ROW_HEIGHT) + 'px';
+
+					// Initial render
+					onScroll();
+					break;
+
+				case 'chunkData':
+					const { offset, data } = msg;
+					cachedChunks.set(offset, new Uint8Array(data));
+					pendingRequests.delete(offset);
+					// Re-render to show loaded data
+					renderVisibleRows();
+					// If selection active, update inspector
+					if (selection.start !== -1) updateInspector();
 					break;
 			}
 		});
 
-		function renderHexView() {
-			const container = document.getElementById('hexView');
-			const rows = Math.ceil(fileData.length / BYTES_PER_ROW);
+		// Virtual Scroll Logic
+		scrollContainer.addEventListener('scroll', onScroll);
 
-			let html = '<div class="hex-table">';
+		let scrollRAF = null;
+		function onScroll() {
+			if (scrollRAF) return;
+			scrollRAF = requestAnimationFrame(() => {
+				scrollRAF = null;
+				renderVisibleRows();
+			});
+		}
 
-			for (let row = 0; row < rows; row++) {
-				const offset = row * BYTES_PER_ROW;
-				const offsetStr = UPPERCASE
-					? offset.toString(16).toUpperCase().padStart(8, '0')
-					: offset.toString(16).padStart(8, '0');
+		function renderVisibleRows() {
+			const scrollTop = scrollContainer.scrollTop;
+			const viewportHeight = scrollContainer.clientHeight;
 
-				html += '<div class="hex-row">';
-				html += '<span class="offset">0x' + offsetStr + '</span>';
-				html += '<span class="hex-bytes">';
+			const startRow = Math.floor(scrollTop / ROW_HEIGHT);
+			const visibleRowCount = Math.ceil(viewportHeight / ROW_HEIGHT);
 
-				// Hex bytes
-				for (let col = 0; col < BYTES_PER_ROW; col++) {
-					const idx = offset + col;
-					if (idx < fileData.length) {
-						const byte = fileData[idx];
-						const hexStr = UPPERCASE
-							? byte.toString(16).toUpperCase().padStart(2, '0')
-							: byte.toString(16).padStart(2, '0');
-						const isNull = byte === 0;
-						html += '<span class="hex-byte' + (isNull ? ' null' : '') + '" data-offset="' + idx + '">' + hexStr + '</span>';
-					} else {
-						html += '<span class="hex-byte">  </span>';
+			// Buffer rows for smooth scrolling
+			const buffer = 10;
+			const renderStartRow = Math.max(0, startRow - buffer);
+			const renderEndRow = Math.min(totalRows, startRow + visibleRowCount + buffer);
+
+			// Position content layer using transform for performance
+			contentLayer.style.transform = 'translateY(' + (renderStartRow * ROW_HEIGHT) + 'px)';
+
+			// Generate HTML for visible rows
+			let html = '';
+			const missingChunks = new Set();
+
+			for (let row = renderStartRow; row < renderEndRow; row++) {
+				const rowOffset = row * BYTES_PER_ROW;
+				const rowData = getRowData(rowOffset);
+
+				if (!rowData) {
+					// Detect missing chunk
+					const chunkStart = Math.floor(rowOffset / CHUNK_SIZE) * CHUNK_SIZE;
+					if (!cachedChunks.has(chunkStart) && !pendingRequests.has(chunkStart)) {
+						missingChunks.add(chunkStart);
 					}
 				}
 
-				html += '</span>';
+				html += generateRowHtml(row, rowOffset, rowData);
+			}
 
-				// ASCII representation
+			contentLayer.innerHTML = html;
+
+			// Request missing data chunks
+			missingChunks.forEach(chunkOffset => {
+				pendingRequests.add(chunkOffset);
+				vscode.postMessage({
+					type: 'requestData',
+					offset: chunkOffset,
+					length: CHUNK_SIZE
+				});
+			});
+		}
+
+		function getRowData(offset) {
+			// Find chunk containing this offset
+			const chunkStart = Math.floor(offset / CHUNK_SIZE) * CHUNK_SIZE;
+			const chunk = cachedChunks.get(chunkStart);
+
+			if (chunk) {
+				const relOffset = offset - chunkStart;
+				const endOffset = Math.min(relOffset + BYTES_PER_ROW, chunk.length);
+				if (relOffset < chunk.length) {
+					return chunk.subarray(relOffset, endOffset);
+				}
+			}
+			return null;
+		}
+
+		function generateRowHtml(row, offset, data) {
+			const offsetStr = UPPERCASE
+				? offset.toString(16).toUpperCase().padStart(8, '0')
+				: offset.toString(16).padStart(8, '0');
+
+			let hexHtml = '';
+			let asciiHtml = '';
+
+			for (let i = 0; i < BYTES_PER_ROW; i++) {
+				const currentOffset = offset + i;
+				if (currentOffset >= totalFileSize) break;
+
+				let byteVal = null;
+				if (data && i < data.length) {
+					byteVal = data[i];
+				}
+
+				const isSelected = selection.start !== -1 &&
+					currentOffset >= Math.min(selection.start, selection.end) &&
+					currentOffset <= Math.max(selection.start, selection.end);
+
+				const selClass = isSelected ? ' selected' : '';
+
+				// Hex byte
+				if (byteVal !== null) {
+					const hex = UPPERCASE
+						? byteVal.toString(16).toUpperCase().padStart(2, '0')
+						: byteVal.toString(16).padStart(2, '0');
+					const nullClass = byteVal === 0 ? ' null' : '';
+					hexHtml += '<span class="byte' + nullClass + selClass + '" data-o="' + currentOffset + '">' + hex + '</span>';
+				} else {
+					hexHtml += '<span class="byte null' + selClass + '">..</span>';
+				}
+
+				// ASCII character
 				if (SHOW_ASCII) {
-					html += '<span class="ascii">';
-					for (let col = 0; col < BYTES_PER_ROW; col++) {
-						const idx = offset + col;
-						if (idx < fileData.length) {
-							const byte = fileData[idx];
-							const isPrintable = byte >= 32 && byte <= 126;
-							const char = isPrintable ? String.fromCharCode(byte) : '.';
-							html += '<span class="ascii-char' + (!isPrintable ? ' non-printable' : '') + '" data-offset="' + idx + '">' + escapeHtml(char) + '</span>';
-						}
+					if (byteVal !== null) {
+						const isPrint = byteVal >= 32 && byteVal <= 126;
+						const char = isPrint ? String.fromCharCode(byteVal) : '.';
+						const npClass = !isPrint ? ' non-print' : '';
+						asciiHtml += '<span class="char' + npClass + selClass + '" data-o="' + currentOffset + '">' + escapeHtml(char) + '</span>';
+					} else {
+						asciiHtml += '<span class="char non-print' + selClass + '">.</span>';
 					}
-					html += '</span>';
 				}
-
-				html += '</div>';
 			}
 
-			html += '</div>';
-			container.innerHTML = html;
-
-			// Add click handlers
-			container.querySelectorAll('.hex-byte[data-offset], .ascii-char[data-offset]').forEach(el => {
-				el.addEventListener('click', (e) => {
-					const offset = parseInt(el.dataset.offset);
-					handleByteClick(offset, e.shiftKey);
-				});
-			});
+			return '<div class="hex-row">' +
+				'<span class="offset-col">0x' + offsetStr + '</span>' +
+				'<div class="bytes-col">' + hexHtml + '</div>' +
+				(SHOW_ASCII ? '<div class="ascii-col">' + asciiHtml + '</div>' : '') +
+				'</div>';
 		}
 
-		function handleByteClick(offset, isShift) {
-			if (isShift && selectedStart !== -1) {
-				selectedEnd = offset;
-			} else {
-				selectedStart = offset;
-				selectedEnd = offset;
+		// Selection handling
+		let isSelecting = false;
+
+		scrollContainer.addEventListener('mousedown', e => {
+			const target = e.target;
+			if (target.dataset && target.dataset.o) {
+				const offset = parseInt(target.dataset.o, 10);
+				if (e.shiftKey && selection.start !== -1) {
+					selection.end = offset;
+				} else {
+					selection.start = offset;
+					selection.end = offset;
+				}
+				isSelecting = true;
+				renderVisibleRows();
+				updateInspector();
 			}
-			updateSelection();
-		}
+		});
 
-		function updateSelection() {
-			// Clear previous selection
-			document.querySelectorAll('.hex-byte.selected, .ascii-char.selected').forEach(el => {
-				el.classList.remove('selected');
-			});
-
-			if (selectedStart === -1) return;
-
-			const start = Math.min(selectedStart, selectedEnd);
-			const end = Math.max(selectedStart, selectedEnd);
-
-			for (let i = start; i <= end; i++) {
-				document.querySelectorAll('[data-offset="' + i + '"]').forEach(el => {
-					el.classList.add('selected');
-				});
+		scrollContainer.addEventListener('mousemove', e => {
+			if (!isSelecting) return;
+			const target = e.target;
+			if (target.dataset && target.dataset.o) {
+				const offset = parseInt(target.dataset.o, 10);
+				selection.end = offset;
+				renderVisibleRows();
+				updateInspector();
 			}
+		});
 
-			// Update sidebar
+		window.addEventListener('mouseup', () => {
+			isSelecting = false;
+		});
+
+		function updateInspector() {
+			if (selection.start === -1) return;
+
+			const start = Math.min(selection.start, selection.end);
+			const end = Math.max(selection.start, selection.end);
+			const len = end - start + 1;
+
 			document.getElementById('selStart').textContent = '0x' + start.toString(16).toUpperCase().padStart(8, '0');
 			document.getElementById('selEnd').textContent = '0x' + end.toString(16).toUpperCase().padStart(8, '0');
-			document.getElementById('selLength').textContent = (end - start + 1) + ' bytes';
-			document.getElementById('currentOffset').textContent = '0x' + start.toString(16).toUpperCase().padStart(8, '0');
-		}
+			document.getElementById('selLen').textContent = len + ' bytes';
+			document.getElementById('cursorOffset').textContent = '0x' + start.toString(16).toUpperCase().padStart(8, '0');
 
-		function updateFileInfo() {
-			document.getElementById('fileSize').textContent = formatBytes(fileData.length);
-			document.getElementById('totalBytes').textContent = fileData.length.toLocaleString();
-
-			// Calculate hashes asynchronously
-			calculateHash('MD5').then(hash => {
-				document.getElementById('md5Hash').textContent = hash.substring(0, 16) + '...';
-				document.getElementById('md5Hash').title = hash;
-			});
-
-			calculateHash('SHA-256').then(hash => {
-				document.getElementById('sha256Hash').textContent = hash;
-			});
-		}
-
-		async function calculateHash(algorithm) {
-			try {
-				const hashBuffer = await crypto.subtle.digest(algorithm, new Uint8Array(fileData));
-				const hashArray = Array.from(new Uint8Array(hashBuffer));
-				return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-			} catch (e) {
-				return 'N/A';
+			// Get bytes for data inspector
+			const bytes = getBytesAt(start, 8);
+			if (!bytes || bytes.length === 0) {
+				clearInspector();
+				return;
 			}
+
+			// Create a DataView with proper alignment
+			const buffer = new ArrayBuffer(8);
+			const uint8View = new Uint8Array(buffer);
+			for (let i = 0; i < Math.min(bytes.length, 8); i++) {
+				uint8View[i] = bytes[i];
+			}
+			const view = new DataView(buffer);
+
+			// Update inspector values
+			document.getElementById('valInt8').textContent = bytes.length >= 1 ? view.getInt8(0) : '-';
+			document.getElementById('valUInt8').textContent = bytes.length >= 1 ? view.getUint8(0) : '-';
+			document.getElementById('valInt16').textContent = bytes.length >= 2 ? view.getInt16(0, littleEndian) : '-';
+			document.getElementById('valUInt16').textContent = bytes.length >= 2 ? view.getUint16(0, littleEndian) : '-';
+			document.getElementById('valInt32').textContent = bytes.length >= 4 ? view.getInt32(0, littleEndian) : '-';
+			document.getElementById('valUInt32').textContent = bytes.length >= 4 ? view.getUint32(0, littleEndian) : '-';
+
+			// Int64/UInt64 with BigInt
+			if (bytes.length >= 8) {
+				try {
+					document.getElementById('valInt64').textContent = view.getBigInt64(0, littleEndian).toString();
+					document.getElementById('valUInt64').textContent = view.getBigUint64(0, littleEndian).toString();
+				} catch (e) {
+					document.getElementById('valInt64').textContent = '-';
+					document.getElementById('valUInt64').textContent = '-';
+				}
+			} else {
+				document.getElementById('valInt64').textContent = '-';
+				document.getElementById('valUInt64').textContent = '-';
+			}
+
+			document.getElementById('valFloat32').textContent = bytes.length >= 4 ? view.getFloat32(0, littleEndian).toPrecision(7) : '-';
+			document.getElementById('valFloat64').textContent = bytes.length >= 8 ? view.getFloat64(0, littleEndian).toPrecision(15) : '-';
+
+			// Binary representation of first byte
+			document.getElementById('valBinary').textContent = bytes.length >= 1 ? bytes[0].toString(2).padStart(8, '0') : '-';
+
+			// Unix timestamp (4 bytes)
+			if (bytes.length >= 4) {
+				const timestamp = view.getUint32(0, littleEndian);
+				if (timestamp > 0 && timestamp < 4294967295) {
+					try {
+						const date = new Date(timestamp * 1000);
+						document.getElementById('valUnixTime').textContent = date.toISOString().replace('T', ' ').substring(0, 19);
+					} catch (e) {
+						document.getElementById('valUnixTime').textContent = '-';
+					}
+				} else {
+					document.getElementById('valUnixTime').textContent = '-';
+				}
+			} else {
+				document.getElementById('valUnixTime').textContent = '-';
+			}
+		}
+
+		function getBytesAt(offset, count) {
+			const result = [];
+			for (let i = 0; i < count && (offset + i) < totalFileSize; i++) {
+				const chunkStart = Math.floor((offset + i) / CHUNK_SIZE) * CHUNK_SIZE;
+				const chunk = cachedChunks.get(chunkStart);
+				if (chunk) {
+					const relOffset = (offset + i) - chunkStart;
+					if (relOffset < chunk.length) {
+						result.push(chunk[relOffset]);
+					}
+				}
+			}
+			return result;
+		}
+
+		function clearInspector() {
+			const ids = ['valInt8', 'valUInt8', 'valInt16', 'valUInt16', 'valInt32', 'valUInt32',
+						 'valInt64', 'valUInt64', 'valFloat32', 'valFloat64', 'valBinary', 'valUnixTime'];
+			ids.forEach(id => {
+				document.getElementById(id).textContent = '-';
+			});
 		}
 
 		function formatBytes(bytes) {
 			if (bytes === 0) return '0 B';
 			const k = 1024;
-			const sizes = ['B', 'KB', 'MB', 'GB'];
+			const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
 			const i = Math.floor(Math.log(bytes) / Math.log(k));
 			return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 		}
 
 		function escapeHtml(text) {
-			const div = document.createElement('div');
-			div.textContent = text;
-			return div.innerHTML;
+			const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+			return text.replace(/[&<>"']/g, m => map[m]);
 		}
-
-		function getSelectedBytes() {
-			if (selectedStart === -1) return [];
-			const start = Math.min(selectedStart, selectedEnd);
-			const end = Math.max(selectedStart, selectedEnd);
-			return fileData.slice(start, end + 1);
-		}
-
-		// Copy buttons
-		document.getElementById('copyHex').addEventListener('click', () => {
-			const bytes = getSelectedBytes();
-			if (bytes.length === 0) return;
-			const hex = bytes.map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
-			vscode.postMessage({ type: 'copyToClipboard', text: hex });
-		});
-
-		document.getElementById('copyC').addEventListener('click', () => {
-			const bytes = getSelectedBytes();
-			if (bytes.length === 0) return;
-			const c = 'unsigned char data[] = { ' + bytes.map(b => '0x' + b.toString(16).toUpperCase().padStart(2, '0')).join(', ') + ' };';
-			vscode.postMessage({ type: 'copyToClipboard', text: c });
-		});
-
-		document.getElementById('copyPython').addEventListener('click', () => {
-			const bytes = getSelectedBytes();
-			if (bytes.length === 0) return;
-			const py = 'data = b"' + bytes.map(b => '\\\\x' + b.toString(16).padStart(2, '0')).join('') + '"';
-			vscode.postMessage({ type: 'copyToClipboard', text: py });
-		});
-
-		// Search
-		document.getElementById('searchBtn').addEventListener('click', () => {
-			const pattern = document.getElementById('searchInput').value.replace(/\\s/g, '');
-			if (!pattern || pattern.length % 2 !== 0) return;
-
-			const searchBytes = [];
-			for (let i = 0; i < pattern.length; i += 2) {
-				searchBytes.push(parseInt(pattern.substr(i, 2), 16));
-			}
-
-			// Search in data
-			for (let i = 0; i <= fileData.length - searchBytes.length; i++) {
-				let found = true;
-				for (let j = 0; j < searchBytes.length; j++) {
-					if (fileData[i + j] !== searchBytes[j]) {
-						found = false;
-						break;
-					}
-				}
-				if (found) {
-					selectedStart = i;
-					selectedEnd = i + searchBytes.length - 1;
-					updateSelection();
-					// Scroll to selection
-					const el = document.querySelector('[data-offset="' + i + '"]');
-					if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-					return;
-				}
-			}
-
-			alert('Pattern not found');
-		});
 	</script>
 </body>
 </html>`;
@@ -639,10 +695,8 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 class HexDocument implements vscode.CustomDocument {
 	constructor(
 		public readonly uri: vscode.Uri,
-		public readonly data: Uint8Array
+		public readonly fileSize: number
 	) { }
 
-	dispose(): void {
-		// Cleanup
-	}
+	dispose(): void { }
 }
