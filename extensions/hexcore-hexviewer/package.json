@@ -1,0 +1,143 @@
+{
+	"name": "hexcore-hexviewer",
+	"displayName": "HexCore Hex Viewer",
+	"description": "Binary file viewer and editor for malware analysis and reverse engineering",
+	"version": "1.0.0",
+	"publisher": "hikarisystem",
+	"license": "MIT",
+	"engines": {
+		"vscode": "^1.70.0"
+	},
+	"categories": [
+		"Other",
+		"Visualization"
+	],
+	"keywords": [
+		"hex",
+		"binary",
+		"hexadecimal",
+		"malware",
+		"reverse engineering",
+		"analysis"
+	],
+	"activationEvents": [],
+	"main": "./out/extension.js",
+	"browser": "./out/extension.js",
+	"contributes": {
+		"commands": [
+			{
+				"command": "hexcore.openHexView",
+				"title": "Open Hex View",
+				"category": "HexCore"
+			},
+			{
+				"command": "hexcore.goToOffset",
+				"title": "Go to Offset",
+				"category": "HexCore"
+			},
+			{
+				"command": "hexcore.searchHex",
+				"title": "Search Hex Pattern",
+				"category": "HexCore"
+			},
+			{
+				"command": "hexcore.copyAsHex",
+				"title": "Copy Selection as Hex",
+				"category": "HexCore"
+			},
+			{
+				"command": "hexcore.copyAsC",
+				"title": "Copy Selection as C Array",
+				"category": "HexCore"
+			},
+			{
+				"command": "hexcore.copyAsPython",
+				"title": "Copy Selection as Python Bytes",
+				"category": "HexCore"
+			}
+		],
+		"menus": {
+			"explorer/context": [
+				{
+					"command": "hexcore.openHexView",
+					"group": "navigation@10"
+				}
+			],
+			"editor/title": [
+				{
+					"command": "hexcore.goToOffset",
+					"when": "activeCustomEditorId == hexcore.hexEditor",
+					"group": "navigation"
+				},
+				{
+					"command": "hexcore.searchHex",
+					"when": "activeCustomEditorId == hexcore.hexEditor",
+					"group": "navigation"
+				}
+			]
+		},
+		"customEditors": [
+			{
+				"viewType": "hexcore.hexEditor",
+				"displayName": "Hex Editor",
+				"selector": [
+					{
+						"filenamePattern": "*.bin"
+					},
+					{
+						"filenamePattern": "*.exe"
+					},
+					{
+						"filenamePattern": "*.dll"
+					},
+					{
+						"filenamePattern": "*.so"
+					},
+					{
+						"filenamePattern": "*.dylib"
+					},
+					{
+						"filenamePattern": "*.dat"
+					},
+					{
+						"filenamePattern": "*.raw"
+					}
+				],
+				"priority": "option"
+			}
+		],
+		"configuration": {
+			"title": "HexCore Hex Viewer",
+			"properties": {
+				"hexcore.hexViewer.bytesPerRow": {
+					"type": "number",
+					"default": 16,
+					"enum": [
+						8,
+						16,
+						32
+					],
+					"description": "Number of bytes to display per row"
+				},
+				"hexcore.hexViewer.showAscii": {
+					"type": "boolean",
+					"default": true,
+					"description": "Show ASCII representation alongside hex"
+				},
+				"hexcore.hexViewer.uppercase": {
+					"type": "boolean",
+					"default": true,
+					"description": "Display hex values in uppercase"
+				}
+			}
+		}
+	},
+	"scripts": {
+		"compile": "tsc -p ./",
+		"watch": "tsc -watch -p ./"
+	},
+	"devDependencies": {
+		"@types/vscode": "^1.70.0",
+		"typescript": "^5.0.0"
+	}
+}
