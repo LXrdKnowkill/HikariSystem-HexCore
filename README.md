@@ -70,6 +70,31 @@ Extract and categorize strings from binary files.
 - **Configurable minimum length**
 - **Markdown report** with tables
 
+### Entropy Analyzer v1.0.0
+Visual entropy analysis with ASCII graph for detecting packed or encrypted regions.
+
+- **Block-by-block entropy** calculation
+- **ASCII graph** visualization
+- **High entropy region** detection
+- **Packer/encryption** assessment
+- **Entropy scale** reference
+
+### Base64 Decoder v1.0.0
+Detect and decode Base64 encoded strings in binary files.
+
+- **Automatic detection** of Base64 patterns
+- **Decodes** both printable text and binary data
+- **Shows offset** location of each string
+- **Categorizes** printable vs binary results
+
+### File Type Detector v1.0.0
+Identify true file type using magic bytes signature detection.
+
+- **50+ file signatures** database
+- **Extension mismatch** detection (security warning)
+- **Categories**: Executable, Archive, Image, Document, Audio, Video, Database, Crypto
+- **Magic bytes** display
+
 ---
 
 ## Installation

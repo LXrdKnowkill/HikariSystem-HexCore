@@ -1,0 +1,47 @@
+{
+	"name": "hexcore-entropy",
+	"displayName": "HexCore Entropy Analyzer",
+	"description": "Visual entropy analysis with graph for detecting packed or encrypted regions",
+	"version": "1.0.0",
+	"publisher": "hikarisystem",
+	"license": "MIT",
+	"engines": {
+		"vscode": "^1.60.0"
+	},
+	"categories": [
+		"Other"
+	],
+	"keywords": [
+		"entropy",
+		"packer",
+		"encryption",
+		"malware",
+		"analysis"
+	],
+	"main": "./out/extension.js",
+	"contributes": {
+		"commands": [
+			{
+				"command": "hexcore.entropy.analyze",
+				"title": "HexCore: Entropy Graph"
+			}
+		],
+		"menus": {
+			"explorer/context": [
+				{
+					"command": "hexcore.entropy.analyze",
+					"group": "hexcore@4"
+				}
+			]
+		}
+	},
+	"scripts": {
+		"compile": "tsc -p ./",
+		"watch": "tsc -watch -p ./"
+	},
+	"devDependencies": {
+		"@types/node": "^18.0.0",
+		"@types/vscode": "^1.60.0",
+		"typescript": "^5.0.0"
+	}
+}

@@ -1,0 +1,47 @@
+{
+	"name": "hexcore-filetype",
+	"displayName": "HexCore File Type Detector",
+	"description": "Identify true file type using magic bytes signature detection",
+	"version": "1.0.0",
+	"publisher": "hikarisystem",
+	"license": "MIT",
+	"engines": {
+		"vscode": "^1.60.0"
+	},
+	"categories": [
+		"Other"
+	],
+	"keywords": [
+		"filetype",
+		"magic",
+		"signature",
+		"detection",
+		"forensics"
+	],
+	"main": "./out/extension.js",
+	"contributes": {
+		"commands": [
+			{
+				"command": "hexcore.filetype.detect",
+				"title": "HexCore: Detect File Type"
+			}
+		],
+		"menus": {
+			"explorer/context": [
+				{
+					"command": "hexcore.filetype.detect",
+					"group": "hexcore@6"
+				}
+			]
+		}
+	},
+	"scripts": {
+		"compile": "tsc -p ./",
+		"watch": "tsc -watch -p ./"
+	},
+	"devDependencies": {
+		"@types/node": "^18.0.0",
+		"@types/vscode": "^1.60.0",
+		"typescript": "^5.0.0"
+	}
+}
