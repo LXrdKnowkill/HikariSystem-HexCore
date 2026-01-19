@@ -101,12 +101,12 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 	private async readChunk(uri: vscode.Uri, offset: number, length: number): Promise<Uint8Array> {
 		if (uri.scheme === 'file') {
 			return new Promise((resolve, reject) => {
-				fs.open(uri.fsPath, 'r', (err, fd) => {
+				fs.open(uri.fsPath, 'r', (err: NodeJS.ErrnoException | null, fd: number) => {
 					if (err) return reject(err);
 					const buffer = Buffer.alloc(length);
-					fs.read(fd, buffer, 0, length, offset, (err, bytesRead) => {
+					fs.read(fd, buffer, 0, length, offset, (readErr: NodeJS.ErrnoException | null, bytesRead: number) => {
 						fs.close(fd, () => { });
-						if (err) return reject(err);
+						if (readErr) return reject(readErr);
 						resolve(buffer.slice(0, bytesRead));
 					});
 				});
