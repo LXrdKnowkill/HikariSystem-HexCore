@@ -1,0 +1,77 @@
+{
+	"name": "hexcore-peanalyzer",
+	"displayName": "HexCore PE Analyzer",
+	"description": "Professional PE (Portable Executable) analyzer for malware analysis and reverse engineering",
+	"version": "1.1.0",
+	"publisher": "hikarisystem",
+	"license": "MIT",
+	"engines": {
+		"vscode": "^1.60.0"
+	},
+	"categories": [
+		"Other"
+	],
+	"keywords": [
+		"pe",
+		"exe",
+		"dll",
+		"malware",
+		"reverse engineering",
+		"binary analysis"
+	],
+	"main": "./out/extension.js",
+	"contributes": {
+		"commands": [
+			{
+				"command": "hexcore.peanalyzer.analyze",
+				"title": "HexCore: Analyze PE File"
+			},
+			{
+				"command": "hexcore.peanalyzer.analyzeActive",
+				"title": "HexCore: Analyze Current File as PE"
+			}
+		],
+		"menus": {
+			"explorer/context": [
+				{
+					"command": "hexcore.peanalyzer.analyze",
+					"when": "resourceExtname == .exe || resourceExtname == .dll || resourceExtname == .sys || resourceExtname == .ocx",
+					"group": "hexcore@1"
+				}
+			],
+			"editor/title/context": [
+				{
+					"command": "hexcore.peanalyzer.analyzeActive",
+					"group": "hexcore@1"
+				}
+			]
+		},
+		"viewsContainers": {
+			"activitybar": [
+				{
+					"id": "hexcore-peanalyzer",
+					"title": "PE Analyzer",
+					"icon": "$(file-binary)"
+				}
+			]
+		},
+		"views": {
+			"hexcore-peanalyzer": [
+				{
+					"type": "webview",
+					"id": "hexcore.peanalyzer.view",
+					"name": "PE Analysis"
+				}
+			]
+		}
+	},
+	"scripts": {
+		"compile": "tsc -p ./",
+		"watch": "tsc -watch -p ./"
+	},
+	"devDependencies": {
+		"@types/node": "^18.0.0",
+		"@types/vscode": "^1.60.0",
+		"typescript": "^5.0.0"
+	}
+}

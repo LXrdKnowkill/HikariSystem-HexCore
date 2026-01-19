@@ -1,0 +1,260 @@
+/*---------------------------------------------------------------------------------------------
+ *  HexCore Hash Calculator v1.0.0
+ *  Calculate MD5, SHA1, SHA256, SHA512 hashes
+ *  Copyright (c) HikariSystem. All rights reserved.
+ *--------------------------------------------------------------------------------------------*/
+
+import * as vscode from 'vscode';
+import * as crypto from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
+
+export function activate(context: vscode.ExtensionContext) {
+	console.log('HexCore Hash Calculator extension activated');
+
+	// Calculate hashes command
+	context.subscriptions.push(
+		vscode.commands.registerCommand('hexcore.hashcalc.calculate', async (uri?: vscode.Uri) => {
+			if (!uri) {
+				const files = await vscode.window.showOpenDialog({
+					canSelectMany: false,
+					canSelectFiles: true,
+					canSelectFolders: false,
+					title: 'Select file to hash'
+				});
+				if (files && files.length > 0) {
+					uri = files[0];
+				} else {
+					return;
+				}
+			}
+
+			await calculateAndShowHashes(uri);
+		})
+	);
+
+	// Verify hash command
+	context.subscriptions.push(
+		vscode.commands.registerCommand('hexcore.hashcalc.verify', async () => {
+			const expectedHash = await vscode.window.showInputBox({
+				prompt: 'Enter the expected hash to verify',
+				placeHolder: 'e.g., d41d8cd98f00b204e9800998ecf8427e'
+			});
+
+			if (!expectedHash) return;
+
+			const files = await vscode.window.showOpenDialog({
+				canSelectMany: false,
+				canSelectFiles: true,
+				title: 'Select file to verify'
+			});
+
+			if (!files || files.length === 0) return;
+
+			await verifyHash(files[0], expectedHash.trim().toLowerCase());
+		})
+	);
+}
+
+async function calculateAndShowHashes(uri: vscode.Uri): Promise<void> {
+	const filePath = uri.fsPath;
+	const fileName = path.basename(filePath);
+
+	// Show progress notification
+	await vscode.window.withProgress({
+		location: vscode.ProgressLocation.Notification,
+		title: `Calculating hashes for ${fileName}...`,
+		cancellable: false
+	}, async (progress) => {
+		try {
+			const stats = fs.statSync(filePath);
+			const fileSize = stats.size;
+
+			progress.report({ increment: 0, message: 'Reading file...' });
+
+			// Calculate all hashes
+			const hashes = await calculateHashes(filePath, (pct) => {
+				progress.report({ increment: pct, message: `Processing... ${Math.round(pct)}%` });
+			});
+
+			// Show results in a new document
+			const content = generateHashReport(fileName, filePath, fileSize, hashes);
+
+			const doc = await vscode.workspace.openTextDocument({
+				content: content,
+				language: 'markdown'
+			});
+
+			await vscode.window.showTextDocument(doc, { preview: false });
+
+		} catch (error: any) {
+			vscode.window.showErrorMessage(`Failed to calculate hashes: ${error.message}`);
+		}
+	});
+}
+
+interface HashResults {
+	md5: string;
+	sha1: string;
+	sha256: string;
+	sha512: string;
+}
+
+async function calculateHashes(filePath: string, onProgress?: (percent: number) => void): Promise<HashResults> {
+	return new Promise((resolve, reject) => {
+		const md5 = crypto.createHash('md5');
+		const sha1 = crypto.createHash('sha1');
+		const sha256 = crypto.createHash('sha256');
+		const sha512 = crypto.createHash('sha512');
+
+		const stats = fs.statSync(filePath);
+		const totalSize = stats.size;
+		let bytesRead = 0;
+
+		const stream = fs.createReadStream(filePath);
+
+		stream.on('data', (chunk: Buffer) => {
+			md5.update(chunk);
+			sha1.update(chunk);
+			sha256.update(chunk);
+			sha512.update(chunk);
+
+			bytesRead += chunk.length;
+			if (onProgress) {
+				onProgress((bytesRead / totalSize) * 100);
+			}
+		});
+
+		stream.on('end', () => {
+			resolve({
+				md5: md5.digest('hex'),
+				sha1: sha1.digest('hex'),
+				sha256: sha256.digest('hex'),
+				sha512: sha512.digest('hex')
+			});
+		});
+
+		stream.on('error', reject);
+	});
+}
+
+function generateHashReport(fileName: string, filePath: string, fileSize: number, hashes: HashResults): string {
+	const sizeFormatted = formatBytes(fileSize);
+	const timestamp = new Date().toISOString();
+
+	return `# HexCore Hash Calculator Report
+
+## File Information
+
+| Property | Value |
+|----------|-------|
+| **File Name** | ${fileName} |
+| **File Path** | ${filePath} |
+| **File Size** | ${sizeFormatted} (${fileSize.toLocaleString()} bytes) |
+| **Calculated** | ${timestamp} |
+
+---
+
+## Hash Values
+
+### MD5
+\`\`\`
+${hashes.md5}
+\`\`\`
+
+### SHA-1
+\`\`\`
+${hashes.sha1}
+\`\`\`
+
+### SHA-256
+\`\`\`
+${hashes.sha256}
+\`\`\`
+
+### SHA-512
+\`\`\`
+${hashes.sha512}
+\`\`\`
+
+---
+
+## Quick Copy
+
+| Algorithm | Hash |
+|-----------|------|
+| MD5 | \`${hashes.md5}\` |
+| SHA-1 | \`${hashes.sha1}\` |
+| SHA-256 | \`${hashes.sha256}\` |
+
+---
+
+## VirusTotal Links
+
+- [Search MD5 on VirusTotal](https://www.virustotal.com/gui/search/${hashes.md5})
+- [Search SHA-256 on VirusTotal](https://www.virustotal.com/gui/search/${hashes.sha256})
+
+---
+*Generated by HexCore Hash Calculator v1.0.0*
+`;
+}
+
+async function verifyHash(uri: vscode.Uri, expectedHash: string): Promise<void> {
+	const filePath = uri.fsPath;
+	const fileName = path.basename(filePath);
+
+	await vscode.window.withProgress({
+		location: vscode.ProgressLocation.Notification,
+		title: `Verifying hash for ${fileName}...`,
+		cancellable: false
+	}, async () => {
+		try {
+			const hashes = await calculateHashes(filePath);
+
+			// Determine which hash type based on length
+			let hashType = '';
+			let calculatedHash = '';
+
+			switch (expectedHash.length) {
+				case 32: // MD5
+					hashType = 'MD5';
+					calculatedHash = hashes.md5;
+					break;
+				case 40: // SHA-1
+					hashType = 'SHA-1';
+					calculatedHash = hashes.sha1;
+					break;
+				case 64: // SHA-256
+					hashType = 'SHA-256';
+					calculatedHash = hashes.sha256;
+					break;
+				case 128: // SHA-512
+					hashType = 'SHA-512';
+					calculatedHash = hashes.sha512;
+					break;
+				default:
+					vscode.window.showErrorMessage(`Unknown hash format (${expectedHash.length} characters). Expected MD5 (32), SHA-1 (40), SHA-256 (64), or SHA-512 (128).`);
+					return;
+			}
+
+			if (calculatedHash === expectedHash) {
+				vscode.window.showInformationMessage(`[MATCH] ${hashType} hash verified successfully for ${fileName}`);
+			} else {
+				vscode.window.showWarningMessage(`[MISMATCH] ${hashType} hash does NOT match for ${fileName}!\n\nExpected: ${expectedHash}\nCalculated: ${calculatedHash}`);
+			}
+
+		} catch (error: any) {
+			vscode.window.showErrorMessage(`Failed to verify hash: ${error.message}`);
+		}
+	});
+}
+
+function formatBytes(bytes: number): string {
+	if (bytes === 0) return '0 B';
+	const k = 1024;
+	const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+	const i = Math.floor(Math.log(bytes) / Math.log(k));
+	return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+export function deactivate() { }

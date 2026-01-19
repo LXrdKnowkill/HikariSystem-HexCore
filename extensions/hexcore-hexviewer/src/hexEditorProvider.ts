@@ -1,5 +1,5 @@
 /*---------------------------------------------------------------------------------------------
- *  HexCore Hex Viewer - Custom Editor Provider
+ *  HexCore Hex Viewer v1.2.0 - Custom Editor Provider
  *  Copyright (c) HikariSystem. All rights reserved.
  *  Licensed under the MIT License.
  *--------------------------------------------------------------------------------------------*/
@@ -75,12 +75,30 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 					vscode.env.clipboard.writeText(message.text);
 					vscode.window.showInformationMessage('Copied to clipboard');
 					break;
+
+				case 'search':
+					try {
+						const results = await this.searchHex(document.uri, document.fileSize, message.pattern);
+						webviewPanel.webview.postMessage({
+							type: 'searchResults',
+							results: results
+						});
+					} catch (e) {
+						vscode.window.showErrorMessage('Search failed: ' + e);
+					}
+					break;
+
+				case 'goToOffset':
+					webviewPanel.webview.postMessage({
+						type: 'jumpToOffset',
+						offset: message.offset
+					});
+					break;
 			}
 		});
 	}
 
 	private async readChunk(uri: vscode.Uri, offset: number, length: number): Promise<Uint8Array> {
-		// Using Node fs for local files for performance random access
 		if (uri.scheme === 'file') {
 			return new Promise((resolve, reject) => {
 				fs.open(uri.fsPath, 'r', (err, fd) => {
@@ -94,10 +112,51 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 				});
 			});
 		} else {
-			// Fallback for non-local schemes (slower, reads full file usually, but API constrained)
 			const allData = await vscode.workspace.fs.readFile(uri);
 			return allData.slice(offset, offset + length);
 		}
+	}
+
+	private async searchHex(uri: vscode.Uri, fileSize: number, pattern: string): Promise<number[]> {
+		const results: number[] = [];
+		const hexPattern = pattern.replace(/\s+/g, '').toUpperCase();
+
+		if (hexPattern.length === 0 || hexPattern.length % 2 !== 0) {
+			return results;
+		}
+
+		const searchBytes: number[] = [];
+		for (let i = 0; i < hexPattern.length; i += 2) {
+			const byte = parseInt(hexPattern.substr(i, 2), 16);
+			if (isNaN(byte)) return results;
+			searchBytes.push(byte);
+		}
+
+		const chunkSize = 65536;
+		const overlap = searchBytes.length - 1;
+
+		for (let offset = 0; offset < fileSize && results.length < 1000; offset += chunkSize - overlap) {
+			const length = Math.min(chunkSize, fileSize - offset);
+			const data = await this.readChunk(uri, offset, length);
+
+			for (let i = 0; i <= data.length - searchBytes.length; i++) {
+				let match = true;
+				for (let j = 0; j < searchBytes.length; j++) {
+					if (data[i + j] !== searchBytes[j]) {
+						match = false;
+						break;
+					}
+				}
+				if (match) {
+					const absoluteOffset = offset + i;
+					if (results.length === 0 || results[results.length - 1] !== absoluteOffset) {
+						results.push(absoluteOffset);
+					}
+				}
+			}
+		}
+
+		return results;
 	}
 
 	private getHtmlForWebview(webview: vscode.Webview, document: HexDocument): string {
@@ -116,7 +175,7 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 	<style>
 		:root {
 			--font-mono: 'Consolas', 'Courier New', monospace;
-			--row-height: 24px;
+			--row-height: 22px;
 		}
 
 		* { margin: 0; padding: 0; box-sizing: border-box; }
@@ -125,9 +184,8 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 			font-family: var(--font-mono);
 			background-color: var(--vscode-editor-background);
 			color: var(--vscode-editor-foreground);
-			padding: 0;
-			overflow: hidden;
 			font-size: 13px;
+			overflow: hidden;
 			user-select: none;
 		}
 
@@ -135,28 +193,64 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 		.toolbar {
 			display: flex;
 			align-items: center;
-			gap: 16px;
-			padding: 8px 16px;
+			gap: 12px;
+			padding: 6px 12px;
 			background: var(--vscode-editor-background);
 			border-bottom: 1px solid var(--vscode-panel-border);
-			height: 40px;
+			height: 36px;
 		}
 
 		.toolbar-item {
 			display: flex;
 			align-items: center;
-			gap: 8px;
-			font-size: 12px;
+			gap: 6px;
+			font-size: 11px;
 		}
 
 		.label { color: var(--vscode-descriptionForeground); }
 		.value { color: var(--vscode-textLink-foreground); font-weight: bold; }
 		.divider { width: 1px; height: 16px; background: var(--vscode-panel-border); }
 
+		/* Search and Go to Offset */
+		.toolbar-input {
+			display: flex;
+			align-items: center;
+			gap: 4px;
+		}
+
+		.toolbar-input input {
+			background: var(--vscode-input-background);
+			border: 1px solid var(--vscode-input-border);
+			color: var(--vscode-input-foreground);
+			padding: 3px 6px;
+			font-size: 11px;
+			font-family: var(--font-mono);
+			width: 120px;
+			border-radius: 3px;
+		}
+
+		.toolbar-input input:focus {
+			outline: 1px solid var(--vscode-focusBorder);
+		}
+
+		.toolbar-btn {
+			background: var(--vscode-button-secondaryBackground);
+			color: var(--vscode-button-secondaryForeground);
+			border: none;
+			padding: 4px 8px;
+			font-size: 11px;
+			cursor: pointer;
+			border-radius: 3px;
+		}
+
+		.toolbar-btn:hover {
+			background: var(--vscode-button-secondaryHoverBackground);
+		}
+
 		/* Main Layout */
 		.container {
 			display: flex;
-			height: calc(100vh - 40px);
+			height: calc(100vh - 36px);
 		}
 
 		/* Virtual Scroll Area */
@@ -192,75 +286,79 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 		}
 
 		.hex-row:hover { background-color: var(--vscode-list-hoverBackground); }
+		.hex-row.highlight { background-color: var(--vscode-editor-findMatchHighlightBackground); }
 
 		.offset-col {
 			color: var(--vscode-editorLineNumber-foreground);
-			width: 90px;
+			width: 80px;
 			flex-shrink: 0;
+			font-size: 11px;
 		}
 
 		.bytes-col {
 			display: flex;
-			gap: 4px;
-			margin-left: 20px;
+			gap: 3px;
+			margin-left: 16px;
 			font-family: var(--font-mono);
 		}
 
 		.byte {
 			display: inline-block;
-			width: 2.2ch;
+			width: 2ch;
 			text-align: center;
-			color: var(--vscode-editor-foreground);
+			font-size: 12px;
 			cursor: default;
 			border-radius: 2px;
 		}
-		.byte.null { color: var(--vscode-descriptionForeground); opacity: 0.5; }
+		.byte.null { color: var(--vscode-descriptionForeground); opacity: 0.4; }
 		.byte:hover { background-color: var(--vscode-editor-selectionBackground); }
 		.byte.selected { background-color: var(--vscode-editor-selectionBackground); color: var(--vscode-editor-selectionForeground); }
+		.byte.search-match { background-color: var(--vscode-editor-findMatchBackground); color: var(--vscode-editor-findMatchForeground); }
 
 		.ascii-col {
-			margin-left: 30px;
+			margin-left: 24px;
 			border-left: 1px solid var(--vscode-panel-border);
 			padding-left: 10px;
 			display: flex;
+			font-size: 11px;
 		}
 		.char {
 			width: 1ch;
 			text-align: center;
 		}
 		.char.selected { background-color: var(--vscode-editor-selectionBackground); color: var(--vscode-editor-selectionForeground); }
-		.char.non-print { color: var(--vscode-descriptionForeground); opacity: 0.5; }
+		.char.non-print { color: var(--vscode-descriptionForeground); opacity: 0.4; }
 
-		/* Sidebar / Data Inspector */
+		/* Sidebar */
 		.sidebar {
-			width: 280px;
+			width: 260px;
 			background-color: var(--vscode-sideBar-background);
 			border-left: 1px solid var(--vscode-panel-border);
-			padding: 16px;
+			padding: 12px;
 			overflow-y: auto;
 			display: flex;
 			flex-direction: column;
-			gap: 20px;
+			gap: 16px;
 		}
 
 		.section-header {
 			text-transform: uppercase;
-			font-size: 11px;
+			font-size: 10px;
 			font-weight: bold;
 			color: var(--vscode-sideBarTitle-foreground);
 			border-bottom: 1px solid var(--vscode-panel-border);
 			padding-bottom: 4px;
-			margin-bottom: 8px;
+			margin-bottom: 6px;
 		}
 
 		.data-grid {
 			display: grid;
-			grid-template-columns: 70px 1fr;
-			gap: 6px;
-			font-size: 12px;
+			grid-template-columns: 65px 1fr;
+			gap: 4px;
+			font-size: 11px;
 		}
 
-		.data-label { color: var(--vscode-descriptionForeground); text-align: right; padding-right: 8px; }
+		.data-label { color: var(--vscode-descriptionForeground); text-align: right; padding-right: 6px; }
 		.data-value {
 			font-family: var(--font-mono);
 			color: var(--vscode-editor-foreground);
@@ -268,25 +366,71 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 			white-space: nowrap;
 			overflow: hidden;
 			text-overflow: ellipsis;
+			font-size: 11px;
 		}
+		.data-value.loading { color: var(--vscode-descriptionForeground); font-style: italic; }
 
 		.endian-toggle {
 			display: flex;
-			gap: 8px;
-			margin-bottom: 12px;
+			gap: 4px;
+			margin-bottom: 8px;
 		}
 		.endian-btn {
+			padding: 3px 6px;
+			font-size: 10px;
+			background: var(--vscode-button-secondaryBackground);
+			color: var(--vscode-button-secondaryForeground);
+			border: 1px solid var(--vscode-panel-border);
+			cursor: pointer;
+			border-radius: 2px;
+		}
+		.endian-btn.active {
+			background: var(--vscode-button-background);
+			color: var(--vscode-button-foreground);
+		}
+
+		/* Copy Buttons */
+		.copy-section {
+			display: flex;
+			flex-direction: column;
+			gap: 4px;
+		}
+		.copy-btn {
 			padding: 4px 8px;
-			font-size: 11px;
+			font-size: 10px;
 			background: var(--vscode-button-secondaryBackground);
 			color: var(--vscode-button-secondaryForeground);
 			border: 1px solid var(--vscode-panel-border);
 			cursor: pointer;
 			border-radius: 3px;
+			text-align: left;
 		}
-		.endian-btn.active {
-			background: var(--vscode-button-background);
-			color: var(--vscode-button-foreground);
+		.copy-btn:hover {
+			background: var(--vscode-button-secondaryHoverBackground);
+		}
+		.copy-btn:disabled {
+			opacity: 0.5;
+			cursor: not-allowed;
+		}
+
+		/* Search Results */
+		.search-results {
+			max-height: 150px;
+			overflow-y: auto;
+			font-size: 10px;
+		}
+		.search-result-item {
+			padding: 3px 6px;
+			cursor: pointer;
+			border-radius: 2px;
+		}
+		.search-result-item:hover {
+			background: var(--vscode-list-hoverBackground);
+		}
+		.search-info {
+			font-size: 10px;
+			color: var(--vscode-descriptionForeground);
+			margin-bottom: 4px;
 		}
 	</style>
 </head>
@@ -306,6 +450,15 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 			<span class="label">OFFSET:</span>
 			<span class="value" id="cursorOffset">0x00000000</span>
 		</div>
+		<div class="divider"></div>
+		<div class="toolbar-input">
+			<input type="text" id="searchInput" placeholder="Search hex (4D 5A)" />
+			<button class="toolbar-btn" id="searchBtn">Find</button>
+		</div>
+		<div class="toolbar-input">
+			<input type="text" id="gotoInput" placeholder="Go to offset" />
+			<button class="toolbar-btn" id="gotoBtn">Go</button>
+		</div>
 	</div>
 
 	<div class="container">
@@ -318,8 +471,8 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 			<div>
 				<div class="section-header">Data Inspector</div>
 				<div class="endian-toggle">
-					<button class="endian-btn active" id="btnLE">Little Endian</button>
-					<button class="endian-btn" id="btnBE">Big Endian</button>
+					<button class="endian-btn active" id="btnLE">LE</button>
+					<button class="endian-btn" id="btnBE">BE</button>
 				</div>
 				<div class="data-grid" id="dataInspector">
 					<div class="data-label">Int8</div><div class="data-value" id="valInt8">-</div>
@@ -333,7 +486,7 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 					<div class="data-label">Float32</div><div class="data-value" id="valFloat32">-</div>
 					<div class="data-label">Float64</div><div class="data-value" id="valFloat64">-</div>
 					<div class="data-label">Binary</div><div class="data-value" id="valBinary">-</div>
-					<div class="data-label">Unix Time</div><div class="data-value" id="valUnixTime">-</div>
+					<div class="data-label">Unix</div><div class="data-value" id="valUnixTime">-</div>
 				</div>
 			</div>
 
@@ -345,6 +498,21 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 					<div class="data-label">Length</div><div class="data-value" id="selLen">-</div>
 				</div>
 			</div>
+
+			<div>
+				<div class="section-header">Copy Selection</div>
+				<div class="copy-section">
+					<button class="copy-btn" id="copyHex" disabled>Copy as Hex</button>
+					<button class="copy-btn" id="copyCArray" disabled>Copy as C Array</button>
+					<button class="copy-btn" id="copyPython" disabled>Copy as Python</button>
+				</div>
+			</div>
+
+			<div id="searchResultsSection" style="display: none;">
+				<div class="section-header">Search Results</div>
+				<div class="search-info" id="searchInfo">-</div>
+				<div class="search-results" id="searchResults"></div>
+			</div>
 		</div>
 	</div>
 
@@ -353,24 +521,27 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 
 		// Configuration
 		const BYTES_PER_ROW = ${bytesPerRow};
-		const ROW_HEIGHT = 24;
+		const ROW_HEIGHT = 22;
 		const UPPERCASE = ${uppercase};
 		const SHOW_ASCII = ${showAscii};
-		const CHUNK_SIZE = 8192; // 8KB chunks for better performance
+		const CHUNK_SIZE = 8192;
 
 		// State
 		let totalFileSize = 0;
 		let totalRows = 0;
-		let cachedChunks = new Map(); // offset -> Uint8Array
-		let pendingRequests = new Set(); // Track in-flight requests
+		let cachedChunks = new Map();
+		let pendingRequests = new Set();
 		let selection = { start: -1, end: -1 };
 		let littleEndian = true;
+		let isSelecting = false;
+		let searchMatches = [];
+		let inspectorPendingOffset = -1;
 
 		const scrollContainer = document.getElementById('scrollContainer');
 		const phantomSpacer = document.getElementById('phantomSpacer');
 		const contentLayer = document.getElementById('contentLayer');
 
-		// Endian toggle buttons
+		// Endian toggle
 		document.getElementById('btnLE').addEventListener('click', () => {
 			littleEndian = true;
 			document.getElementById('btnLE').classList.add('active');
@@ -385,6 +556,88 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 			updateInspector();
 		});
 
+		// Search functionality
+		document.getElementById('searchBtn').addEventListener('click', doSearch);
+		document.getElementById('searchInput').addEventListener('keydown', e => {
+			if (e.key === 'Enter') doSearch();
+		});
+
+		function doSearch() {
+			const pattern = document.getElementById('searchInput').value.trim();
+			if (pattern) {
+				document.getElementById('searchInfo').textContent = 'Searching...';
+				document.getElementById('searchResultsSection').style.display = 'block';
+				vscode.postMessage({ type: 'search', pattern: pattern });
+			}
+		}
+
+		// Go to offset
+		document.getElementById('gotoBtn').addEventListener('click', doGoto);
+		document.getElementById('gotoInput').addEventListener('keydown', e => {
+			if (e.key === 'Enter') doGoto();
+		});
+
+		function doGoto() {
+			const input = document.getElementById('gotoInput').value.trim();
+			let offset = 0;
+			if (input.toLowerCase().startsWith('0x')) {
+				offset = parseInt(input, 16);
+			} else {
+				offset = parseInt(input, 10);
+			}
+			if (!isNaN(offset) && offset >= 0 && offset < totalFileSize) {
+				jumpToOffset(offset);
+			}
+		}
+
+		function jumpToOffset(offset) {
+			const row = Math.floor(offset / BYTES_PER_ROW);
+			scrollContainer.scrollTop = row * ROW_HEIGHT;
+			selection.start = offset;
+			selection.end = offset;
+			renderVisibleRows();
+			updateInspector();
+		}
+
+		// Copy buttons
+		document.getElementById('copyHex').addEventListener('click', () => copySelection('hex'));
+		document.getElementById('copyCArray').addEventListener('click', () => copySelection('carray'));
+		document.getElementById('copyPython').addEventListener('click', () => copySelection('python'));
+
+		function copySelection(format) {
+			if (selection.start === -1) return;
+			const start = Math.min(selection.start, selection.end);
+			const end = Math.max(selection.start, selection.end);
+			const bytes = getBytesRange(start, end - start + 1);
+			if (bytes.length === 0) return;
+
+			let text = '';
+			if (format === 'hex') {
+				text = bytes.map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+			} else if (format === 'carray') {
+				text = 'unsigned char data[] = { ' + bytes.map(b => '0x' + b.toString(16).toUpperCase().padStart(2, '0')).join(', ') + ' };';
+			} else if (format === 'python') {
+				text = 'b"' + bytes.map(b => '\\\\x' + b.toString(16).padStart(2, '0')).join('') + '"';
+			}
+
+			vscode.postMessage({ type: 'copyToClipboard', text: text });
+		}
+
+		function getBytesRange(start, count) {
+			const result = [];
+			for (let i = 0; i < count && (start + i) < totalFileSize; i++) {
+				const chunkStart = Math.floor((start + i) / CHUNK_SIZE) * CHUNK_SIZE;
+				const chunk = cachedChunks.get(chunkStart);
+				if (chunk) {
+					const relOffset = (start + i) - chunkStart;
+					if (relOffset < chunk.length) {
+						result.push(chunk[relOffset]);
+					}
+				}
+			}
+			return result;
+		}
+
 		// Initialization
 		vscode.postMessage({ type: 'ready' });
 
@@ -396,29 +649,44 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 					totalRows = Math.ceil(totalFileSize / BYTES_PER_ROW);
 					document.getElementById('fileName').textContent = msg.fileName.split(/[\\\\/]/).pop();
 					document.getElementById('fileSize').textContent = formatBytes(totalFileSize);
-
-					// Setup virtual scroll phantom height
 					phantomSpacer.style.height = (totalRows * ROW_HEIGHT) + 'px';
-
-					// Initial render
 					onScroll();
 					break;
 
 				case 'chunkData':
-					const { offset, data } = msg;
-					cachedChunks.set(offset, new Uint8Array(data));
-					pendingRequests.delete(offset);
-					// Re-render to show loaded data
+					cachedChunks.set(msg.offset, new Uint8Array(msg.data));
+					pendingRequests.delete(msg.offset);
 					renderVisibleRows();
-					// If selection active, update inspector
-					if (selection.start !== -1) updateInspector();
+					// Update inspector if we were waiting for this data
+					if (inspectorPendingOffset !== -1) {
+						const chunkStart = Math.floor(inspectorPendingOffset / CHUNK_SIZE) * CHUNK_SIZE;
+						if (chunkStart === msg.offset) {
+							updateInspector();
+						}
+					}
+					break;
+
+				case 'searchResults':
+					searchMatches = msg.results;
+					document.getElementById('searchInfo').textContent = msg.results.length + ' matches found' + (msg.results.length >= 1000 ? ' (limited)' : '');
+					const resultsDiv = document.getElementById('searchResults');
+					resultsDiv.innerHTML = msg.results.slice(0, 100).map(offset =>
+						'<div class="search-result-item" data-offset="' + offset + '">0x' + offset.toString(16).toUpperCase().padStart(8, '0') + '</div>'
+					).join('');
+					resultsDiv.querySelectorAll('.search-result-item').forEach(el => {
+						el.addEventListener('click', () => jumpToOffset(parseInt(el.dataset.offset)));
+					});
+					renderVisibleRows();
+					break;
+
+				case 'jumpToOffset':
+					jumpToOffset(msg.offset);
 					break;
 			}
 		});
 
-		// Virtual Scroll Logic
+		// Virtual Scroll
 		scrollContainer.addEventListener('scroll', onScroll);
-
 		let scrollRAF = null;
 		function onScroll() {
 			if (scrollRAF) return;
@@ -431,19 +699,14 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 		function renderVisibleRows() {
 			const scrollTop = scrollContainer.scrollTop;
 			const viewportHeight = scrollContainer.clientHeight;
-
 			const startRow = Math.floor(scrollTop / ROW_HEIGHT);
 			const visibleRowCount = Math.ceil(viewportHeight / ROW_HEIGHT);
-
-			// Buffer rows for smooth scrolling
-			const buffer = 10;
+			const buffer = 5;
 			const renderStartRow = Math.max(0, startRow - buffer);
 			const renderEndRow = Math.min(totalRows, startRow + visibleRowCount + buffer);
 
-			// Position content layer using transform for performance
 			contentLayer.style.transform = 'translateY(' + (renderStartRow * ROW_HEIGHT) + 'px)';
 
-			// Generate HTML for visible rows
 			let html = '';
 			const missingChunks = new Set();
 
@@ -452,7 +715,6 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 				const rowData = getRowData(rowOffset);
 
 				if (!rowData) {
-					// Detect missing chunk
 					const chunkStart = Math.floor(rowOffset / CHUNK_SIZE) * CHUNK_SIZE;
 					if (!cachedChunks.has(chunkStart) && !pendingRequests.has(chunkStart)) {
 						missingChunks.add(chunkStart);
@@ -464,22 +726,15 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 
 			contentLayer.innerHTML = html;
 
-			// Request missing data chunks
 			missingChunks.forEach(chunkOffset => {
 				pendingRequests.add(chunkOffset);
-				vscode.postMessage({
-					type: 'requestData',
-					offset: chunkOffset,
-					length: CHUNK_SIZE
-				});
+				vscode.postMessage({ type: 'requestData', offset: chunkOffset, length: CHUNK_SIZE });
 			});
 		}
 
 		function getRowData(offset) {
-			// Find chunk containing this offset
 			const chunkStart = Math.floor(offset / CHUNK_SIZE) * CHUNK_SIZE;
 			const chunk = cachedChunks.get(chunkStart);
-
 			if (chunk) {
 				const relOffset = offset - chunkStart;
 				const endOffset = Math.min(relOffset + BYTES_PER_ROW, chunk.length);
@@ -503,36 +758,36 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 				if (currentOffset >= totalFileSize) break;
 
 				let byteVal = null;
-				if (data && i < data.length) {
-					byteVal = data[i];
-				}
+				if (data && i < data.length) byteVal = data[i];
 
 				const isSelected = selection.start !== -1 &&
 					currentOffset >= Math.min(selection.start, selection.end) &&
 					currentOffset <= Math.max(selection.start, selection.end);
 
-				const selClass = isSelected ? ' selected' : '';
+				const isSearchMatch = searchMatches.includes(currentOffset);
 
-				// Hex byte
+				let classes = 'byte';
+				if (byteVal === 0) classes += ' null';
+				if (isSelected) classes += ' selected';
+				if (isSearchMatch) classes += ' search-match';
+
 				if (byteVal !== null) {
 					const hex = UPPERCASE
 						? byteVal.toString(16).toUpperCase().padStart(2, '0')
 						: byteVal.toString(16).padStart(2, '0');
-					const nullClass = byteVal === 0 ? ' null' : '';
-					hexHtml += '<span class="byte' + nullClass + selClass + '" data-o="' + currentOffset + '">' + hex + '</span>';
+					hexHtml += '<span class="' + classes + '" data-o="' + currentOffset + '">' + hex + '</span>';
 				} else {
-					hexHtml += '<span class="byte null' + selClass + '">..</span>';
+					hexHtml += '<span class="byte null">..</span>';
 				}
 
-				// ASCII character
 				if (SHOW_ASCII) {
 					if (byteVal !== null) {
 						const isPrint = byteVal >= 32 && byteVal <= 126;
 						const char = isPrint ? String.fromCharCode(byteVal) : '.';
-						const npClass = !isPrint ? ' non-print' : '';
-						asciiHtml += '<span class="char' + npClass + selClass + '" data-o="' + currentOffset + '">' + escapeHtml(char) + '</span>';
+						const charClasses = 'char' + (isSelected ? ' selected' : '') + (!isPrint ? ' non-print' : '');
+						asciiHtml += '<span class="' + charClasses + '" data-o="' + currentOffset + '">' + escapeHtml(char) + '</span>';
 					} else {
-						asciiHtml += '<span class="char non-print' + selClass + '">.</span>';
+						asciiHtml += '<span class="char non-print">.</span>';
 					}
 				}
 			}
@@ -545,8 +800,6 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 		}
 
 		// Selection handling
-		let isSelecting = false;
-
 		scrollContainer.addEventListener('mousedown', e => {
 			const target = e.target;
 			if (target.dataset && target.dataset.o) {
@@ -560,6 +813,7 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 				isSelecting = true;
 				renderVisibleRows();
 				updateInspector();
+				updateCopyButtons();
 			}
 		});
 
@@ -571,12 +825,20 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 				selection.end = offset;
 				renderVisibleRows();
 				updateInspector();
+				updateCopyButtons();
 			}
 		});
 
 		window.addEventListener('mouseup', () => {
 			isSelecting = false;
 		});
+
+		function updateCopyButtons() {
+			const hasSelection = selection.start !== -1;
+			document.getElementById('copyHex').disabled = !hasSelection;
+			document.getElementById('copyCArray').disabled = !hasSelection;
+			document.getElementById('copyPython').disabled = !hasSelection;
+		}
 
 		function updateInspector() {
 			if (selection.start === -1) return;
@@ -590,14 +852,24 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 			document.getElementById('selLen').textContent = len + ' bytes';
 			document.getElementById('cursorOffset').textContent = '0x' + start.toString(16).toUpperCase().padStart(8, '0');
 
-			// Get bytes for data inspector
-			const bytes = getBytesAt(start, 8);
-			if (!bytes || bytes.length === 0) {
-				clearInspector();
+			// Get 8 bytes starting at selection for inspector
+			const bytes = getBytesRange(start, 8);
+
+			if (bytes.length === 0) {
+				// Request the chunk if not loaded
+				const chunkStart = Math.floor(start / CHUNK_SIZE) * CHUNK_SIZE;
+				if (!cachedChunks.has(chunkStart) && !pendingRequests.has(chunkStart)) {
+					inspectorPendingOffset = start;
+					pendingRequests.add(chunkStart);
+					vscode.postMessage({ type: 'requestData', offset: chunkStart, length: CHUNK_SIZE });
+					setInspectorLoading();
+				}
 				return;
 			}
 
-			// Create a DataView with proper alignment
+			inspectorPendingOffset = -1;
+
+			// Create DataView
 			const buffer = new ArrayBuffer(8);
 			const uint8View = new Uint8Array(buffer);
 			for (let i = 0; i < Math.min(bytes.length, 8); i++) {
@@ -605,7 +877,7 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 			}
 			const view = new DataView(buffer);
 
-			// Update inspector values
+			// Update values
 			document.getElementById('valInt8').textContent = bytes.length >= 1 ? view.getInt8(0) : '-';
 			document.getElementById('valUInt8').textContent = bytes.length >= 1 ? view.getUint8(0) : '-';
 			document.getElementById('valInt16').textContent = bytes.length >= 2 ? view.getInt16(0, littleEndian) : '-';
@@ -613,7 +885,6 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 			document.getElementById('valInt32').textContent = bytes.length >= 4 ? view.getInt32(0, littleEndian) : '-';
 			document.getElementById('valUInt32').textContent = bytes.length >= 4 ? view.getUint32(0, littleEndian) : '-';
 
-			// Int64/UInt64 with BigInt
 			if (bytes.length >= 8) {
 				try {
 					document.getElementById('valInt64').textContent = view.getBigInt64(0, littleEndian).toString();
@@ -627,19 +898,15 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 				document.getElementById('valUInt64').textContent = '-';
 			}
 
-			document.getElementById('valFloat32').textContent = bytes.length >= 4 ? view.getFloat32(0, littleEndian).toPrecision(7) : '-';
-			document.getElementById('valFloat64').textContent = bytes.length >= 8 ? view.getFloat64(0, littleEndian).toPrecision(15) : '-';
-
-			// Binary representation of first byte
+			document.getElementById('valFloat32').textContent = bytes.length >= 4 ? view.getFloat32(0, littleEndian).toPrecision(6) : '-';
+			document.getElementById('valFloat64').textContent = bytes.length >= 8 ? view.getFloat64(0, littleEndian).toPrecision(10) : '-';
 			document.getElementById('valBinary').textContent = bytes.length >= 1 ? bytes[0].toString(2).padStart(8, '0') : '-';
 
-			// Unix timestamp (4 bytes)
 			if (bytes.length >= 4) {
-				const timestamp = view.getUint32(0, littleEndian);
-				if (timestamp > 0 && timestamp < 4294967295) {
+				const ts = view.getUint32(0, littleEndian);
+				if (ts > 0 && ts < 4294967295) {
 					try {
-						const date = new Date(timestamp * 1000);
-						document.getElementById('valUnixTime').textContent = date.toISOString().replace('T', ' ').substring(0, 19);
+						document.getElementById('valUnixTime').textContent = new Date(ts * 1000).toISOString().slice(0, 19).replace('T', ' ');
 					} catch (e) {
 						document.getElementById('valUnixTime').textContent = '-';
 					}
@@ -651,26 +918,13 @@ export class HexEditorProvider implements vscode.CustomReadonlyEditorProvider<He
 			}
 		}
 
-		function getBytesAt(offset, count) {
-			const result = [];
-			for (let i = 0; i < count && (offset + i) < totalFileSize; i++) {
-				const chunkStart = Math.floor((offset + i) / CHUNK_SIZE) * CHUNK_SIZE;
-				const chunk = cachedChunks.get(chunkStart);
-				if (chunk) {
-					const relOffset = (offset + i) - chunkStart;
-					if (relOffset < chunk.length) {
-						result.push(chunk[relOffset]);
-					}
-				}
-			}
-			return result;
-		}
-
-		function clearInspector() {
+		function setInspectorLoading() {
 			const ids = ['valInt8', 'valUInt8', 'valInt16', 'valUInt16', 'valInt32', 'valUInt32',
 						 'valInt64', 'valUInt64', 'valFloat32', 'valFloat64', 'valBinary', 'valUnixTime'];
 			ids.forEach(id => {
-				document.getElementById(id).textContent = '-';
+				const el = document.getElementById(id);
+				el.textContent = '...';
+				el.classList.add('loading');
 			});
 		}
 

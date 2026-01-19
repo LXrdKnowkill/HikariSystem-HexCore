@@ -1,0 +1,47 @@
+{
+	"name": "hexcore-strings",
+	"displayName": "HexCore Strings Extractor",
+	"description": "Extract ASCII and Unicode strings from binary files for malware analysis",
+	"version": "1.0.0",
+	"publisher": "hikarisystem",
+	"license": "MIT",
+	"engines": {
+		"vscode": "^1.60.0"
+	},
+	"categories": [
+		"Other"
+	],
+	"keywords": [
+		"strings",
+		"binary",
+		"malware",
+		"reverse engineering",
+		"forensics"
+	],
+	"main": "./out/extension.js",
+	"contributes": {
+		"commands": [
+			{
+				"command": "hexcore.strings.extract",
+				"title": "HexCore: Extract Strings"
+			}
+		],
+		"menus": {
+			"explorer/context": [
+				{
+					"command": "hexcore.strings.extract",
+					"group": "hexcore@3"
+				}
+			]
+		}
+	},
+	"scripts": {
+		"compile": "tsc -p ./",
+		"watch": "tsc -watch -p ./"
+	},
+	"devDependencies": {
+		"@types/node": "^18.0.0",
+		"@types/vscode": "^1.60.0",
+		"typescript": "^5.0.0"
+	}
+}

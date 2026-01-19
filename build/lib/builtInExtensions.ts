@@ -159,6 +159,8 @@ function writeControlFile(control: IControlFile): void {
 }
 
 export function getBuiltInExtensions(): Promise<void> {
+	log('Skipping built-in extensions synchronization for offline build...');
+	return Promise.resolve();
 	log('Synchronizing built-in extensions...');
 	log(`You can manage built-in extensions with the ${ansiColors.cyan('--builtin')} flag`);
 
