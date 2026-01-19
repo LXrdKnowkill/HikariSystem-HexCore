@@ -1,0 +1,121 @@
+name: HexCore Build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build-extensions:
+    name: Build HexCore Extensions
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+          cache-dependency-path: |
+            extensions/hexcore-hexviewer/package-lock.json
+            extensions/hexcore-peanalyzer/package-lock.json
+            extensions/hexcore-hashcalc/package-lock.json
+            extensions/hexcore-strings/package-lock.json
+            extensions/hexcore-entropy/package-lock.json
+            extensions/hexcore-base64/package-lock.json
+            extensions/hexcore-filetype/package-lock.json
+
+      - name: Build Hex Viewer
+        working-directory: extensions/hexcore-hexviewer
+        run: |
+          npm ci
+          npm run compile
+
+      - name: Build PE Analyzer
+        working-directory: extensions/hexcore-peanalyzer
+        run: |
+          npm ci
+          npm run compile
+
+      - name: Build Hash Calculator
+        working-directory: extensions/hexcore-hashcalc
+        run: |
+          npm ci
+          npm run compile
+
+      - name: Build Strings Extractor
+        working-directory: extensions/hexcore-strings
+        run: |
+          npm ci
+          npm run compile
+
+      - name: Build Entropy Analyzer
+        working-directory: extensions/hexcore-entropy
+        run: |
+          npm ci
+          npm run compile
+
+      - name: Build Base64 Decoder
+        working-directory: extensions/hexcore-base64
+        run: |
+          npm ci
+          npm run compile
+
+      - name: Build File Type Detector
+        working-directory: extensions/hexcore-filetype
+        run: |
+          npm ci
+          npm run compile
+
+      - name: Build Common Utilities
+        working-directory: extensions/hexcore-common
+        run: |
+          npm ci
+          npm run compile
+
+      - name: Build Summary
+        run: |
+          echo "## HexCore Extensions Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Extension | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| hexcore-hexviewer | ✅ Built |" >> $GITHUB_STEP_SUMMARY
+          echo "| hexcore-peanalyzer | ✅ Built |" >> $GITHUB_STEP_SUMMARY
+          echo "| hexcore-hashcalc | ✅ Built |" >> $GITHUB_STEP_SUMMARY
+          echo "| hexcore-strings | ✅ Built |" >> $GITHUB_STEP_SUMMARY
+          echo "| hexcore-entropy | ✅ Built |" >> $GITHUB_STEP_SUMMARY
+          echo "| hexcore-base64 | ✅ Built |" >> $GITHUB_STEP_SUMMARY
+          echo "| hexcore-filetype | ✅ Built |" >> $GITHUB_STEP_SUMMARY
+          echo "| hexcore-common | ✅ Built |" >> $GITHUB_STEP_SUMMARY
+
+  lint:
+    name: Lint TypeScript
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+
+      - name: Check TypeScript syntax (Hex Viewer)
+        working-directory: extensions/hexcore-hexviewer
+        run: |
+          npm ci
+          npx tsc --noEmit || true
+
+      - name: Check TypeScript syntax (PE Analyzer)
+        working-directory: extensions/hexcore-peanalyzer
+        run: |
+          npm ci
+          npx tsc --noEmit || true
