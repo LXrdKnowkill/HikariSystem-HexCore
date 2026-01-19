@@ -47,6 +47,12 @@ jobs:
           ELECTRON_SKIP_BINARY_DOWNLOAD: 0
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
 
+      - name: Install build dependencies
+        run: |
+          cd build && npm ci
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Compile HexCore Extensions
         run: |
           cd extensions/hexcore-hexviewer && npm ci && npm run compile
@@ -110,6 +116,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ELECTRON_SKIP_BINARY_DOWNLOAD: 0
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+
+      - name: Install build dependencies
+        run: |
+          cd build && npm ci
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Compile HexCore Extensions
         run: |
