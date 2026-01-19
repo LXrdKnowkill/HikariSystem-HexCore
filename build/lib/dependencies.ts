@@ -33,7 +33,16 @@ function getNpmProductionDependencies(folder: string): string[] {
 	}
 
 	return raw.split(/\r?\n/).filter(line => {
-		return !!line.trim() && path.relative(root, line) !== path.relative(root, folder);
+		const trimmed = line.trim();
+		// Filter out empty lines and the folder itself
+		return !!trimmed && path.relative(root, trimmed) !== path.relative(root, folder);
+	}).filter(line => {
+		// Filter out paths that don't exist (npm ls can return invalid paths)
+		try {
+			return fs.existsSync(line);
+		} catch {
+			return false;
+		}
 	});
 }
 
