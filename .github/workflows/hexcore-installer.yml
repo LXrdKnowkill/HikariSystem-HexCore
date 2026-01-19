@@ -38,6 +38,7 @@ jobs:
         run: |
           npm install -g node-gyp
           npm install -g gulp-cli
+          npm install -g tsx
 
       - name: Install dependencies
         run: npm ci
@@ -96,6 +97,12 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config libx11-dev libxkbfile-dev libsecret-1-dev libkrb5-dev
+
+      - name: Install build tools
+        run: |
+          npm install -g node-gyp
+          npm install -g gulp-cli
+          npm install -g tsx
 
       - name: Install dependencies
         run: npm ci
