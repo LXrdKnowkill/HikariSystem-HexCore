@@ -1,99 +1,148 @@
-# Contributing to VS Code
+# Contributing to HexCore IDE
 
-Welcome, and thank you for your interest in contributing to VS Code!
+Thank you for your interest in contributing to HexCore IDE!
 
-There are several ways in which you can contribute, beyond writing code. The goal of this document is to provide a high-level overview of how you can get involved.
+---
 
-## Asking Questions
+## Getting Started
 
+### Prerequisites
 
-Have a question? Instead of opening an issue, please ask on [Stack Overflow](https://stackoverflow.com/questions/tagged/visual-studio-code) using the tag `visual-studio-code`.
+- Node.js 18+
+- Python 3.11+
+- Git
+- Visual Studio Build Tools (Windows)
 
-The active community will be eager to assist you. Your well-worded question will serve as a resource to others searching for help.
+### Setup Development Environment
 
-## Providing Feedback
+```bash
+# Clone the repository
+git clone https://github.com/LXrdKnowkill/HikariSystem-HexCore.git
+cd HikariSystem-HexCore
 
-Your comments and feedback are welcome, and the development team is available via a handful of different channels.
+# Install dependencies
+npm install
 
-See the [Feedback Channels](https://github.com/microsoft/vscode/wiki/Feedback-Channels) wiki page for details on how to share your thoughts.
+# Compile extensions
+cd extensions/hexcore-hexviewer && npm install && npm run compile && cd ../..
+cd extensions/hexcore-peanalyzer && npm install && npm run compile && cd ../..
+# ... repeat for other extensions
 
-## Reporting Issues
+# Run in development mode
+./scripts/code.bat  # Windows
+./scripts/code.sh   # Linux
+```
 
-Have you identified a reproducible problem in VS Code? Do you have a feature request? We want to hear about it! Here's how you can report your issue as effectively as possible.
+---
 
-### Identify Where to Report
+## Project Structure
 
-The VS Code project is distributed across multiple repositories. Try to file the issue against the correct repository. Check the list of [Related Projects](https://github.com/microsoft/vscode/wiki/Related-Projects) if you aren't sure which repo is correct.
+```
+HikariSystem-HexCore/
+├── extensions/           # HexCore extensions
+│   ├── hexcore-hexviewer/
+│   ├── hexcore-peanalyzer/
+│   ├── hexcore-hashcalc/
+│   ├── hexcore-strings/
+│   ├── hexcore-entropy/
+│   ├── hexcore-base64/
+│   ├── hexcore-filetype/
+│   └── hexcore-common/
+├── docs/                 # Documentation
+├── .github/workflows/    # CI/CD
+├── product.json          # Product configuration
+└── README.md
+```
 
-Can you recreate the issue even after [disabling all extensions](https://code.visualstudio.com/docs/editor/extension-gallery#_disable-an-extension)? If you find the issue is caused by an extension you have installed, please file an issue on the extension's repo directly.
+---
 
-### Look For an Existing Issue
+## Contributing Code
 
-Before you create a new issue, please do a search in [open issues](https://github.com/microsoft/vscode/issues) to see if the issue or feature request has already been filed.
+### 1. Fork the Repository
 
-Be sure to scan through the [most popular](https://github.com/microsoft/vscode/issues?q=is%3Aopen+is%3Aissue+label%3Afeature-request+sort%3Areactions-%2B1-desc) feature requests.
+Create your own fork on GitHub.
 
-If you find your issue already exists, make relevant comments and add your [reaction](https://github.com/blog/2119-add-reactions-to-pull-requests-issues-and-comments). Use a reaction in place of a "+1" comment:
+### 2. Create a Branch
 
-* 👍 - upvote
-* 👎 - downvote
+```bash
+git checkout -b feature/your-feature-name
+```
 
-If you cannot find an existing issue that describes your bug or feature, create a new issue using the guidelines below.
+### 3. Make Changes
 
-### Writing Good Bug Reports and Feature Requests
+- Follow TypeScript best practices
+- No implicit `any` types
+- Add comments for complex logic
+- Test locally before submitting
 
-File a single issue per problem and feature request. Do not enumerate multiple bugs or feature requests in the same issue.
+### 4. Commit with Conventional Commits
 
-Do not add your issue as a comment to an existing issue unless it's for the identical input. Many issues look similar but have different causes.
+```bash
+git commit -m "feat: Add new feature"
+git commit -m "fix: Resolve bug in PE parser"
+git commit -m "docs: Update getting started guide"
+```
 
-The more information you can provide, the more likely someone will be successful at reproducing the issue and finding a fix.
+### 5. Submit Pull Request
 
-The built-in tool for reporting an issue, which you can access by using `Report Issue` in VS Code's Help menu, can help streamline this process by automatically providing the version of VS Code, all your installed extensions, and your system info. Additionally, the tool will search among existing issues to see if a similar issue already exists.
+Push to your fork and open a PR against `main`.
 
-Please include the following with each issue:
+---
 
-* Version of VS Code
-* Your operating system
-* List of extensions that you have installed
-* Reproducible steps (1... 2... 3...) that cause the issue
-* What you expected to see, versus what you actually saw
-* Images, animations, or a link to a video showing the issue occurring
-* A code snippet that demonstrates the issue or a link to a code repository the developers can easily pull down to recreate the issue locally
-  * **Note:** Because the developers need to copy and paste the code snippet, including a code snippet as a media file (i.e. .gif) is not sufficient.
-* Errors from the Dev Tools Console (open from the menu: Help > Toggle Developer Tools)
+## Extension Development
 
-### Creating Pull Requests
+### Creating a New Extension
 
-* Please refer to the article on [creating pull requests](https://github.com/microsoft/vscode/wiki/How-to-Contribute#pull-requests) and contributing to this project.
+1. Copy an existing extension as template
+2. Update `package.json` with new name and commands
+3. Implement functionality in `src/extension.ts`
+4. Add to `hexcore-build.yml` workflow
+5. Update documentation
 
-### Final Checklist
+### Extension Guidelines
 
-Please remember to do the following:
+- Use streaming for large files
+- Provide progress indicators
+- Generate Markdown reports
+- Handle errors gracefully
+- No third-party dependencies (prefer Node.js built-ins)
 
-* [ ] Search the issue repository to ensure your report is a new issue
-* [ ] Recreate the issue after disabling all extensions
-* [ ] Simplify your code around the issue to better isolate the problem
+---
 
-Don't feel bad if the developers can't reproduce the issue right away. They will simply ask for more information!
+## Code Style
 
-### Follow Your Issue
+- **TypeScript** - Strict mode enabled
+- **Indentation** - Tabs
+- **Semicolons** - Required
+- **Types** - Explicit, no `any`
+- **Comments** - English, JSDoc for public APIs
 
-Once submitted, your report will go into the [issue tracking](https://github.com/microsoft/vscode/wiki/Issue-Tracking) workflow. Be sure to understand what will happen next, so you know what to expect and how to continue to assist throughout the process.
+---
 
-## Automated Issue Management
+## Testing
 
-We use GitHub Actions to help us manage issues. These Actions and their descriptions can be [viewed here](https://github.com/microsoft/vscode-github-triage-actions). Some examples of what these Actions do are:
+### Local Testing
 
-* Automatically close any issue marked `info-needed` if there has been no response in the past 7 days.
-* Automatically lock issues 45 days after they are closed.
-* Automatically implement the VS Code [feature request pipeline](https://github.com/microsoft/vscode/wiki/Issues-Triaging#managing-feature-requests).
+```bash
+# Run HexCore in dev mode
+./scripts/code.bat
 
-If you believe the bot got something wrong, please open a new issue and let us know.
+# Test extension on sample files
+# Right-click → HexCore commands
+```
 
-## Contributing Fixes
+### CI Testing
 
-If you are interested in writing code to fix issues, please see [How to Contribute](https://github.com/microsoft/vscode/wiki/How-to-Contribute) in the wiki.
+All PRs must pass GitHub Actions checks:
+- Build all extensions
+- Lint TypeScript
 
-## Thank You
+---
 
-Your contributions to open source, large or small, make great projects like this possible. Thank you for taking the time to contribute.
+## License
+
+By contributing, you agree that your contributions will be licensed under the MIT License.
+
+---
+
+**HikariSystem** - Security Tools for Professionals
