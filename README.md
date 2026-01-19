@@ -54,19 +54,21 @@ Comprehensive Portable Executable analysis for Windows binaries.
 - **Security Flags** - ASLR, DEP, CFG detection
 - **Export to JSON** - Save analysis for external tools
 
-### Hash Calculator v1.0.0
-Fast file hashing with multiple algorithms.
+### Hash Calculator v1.1.0
+Fast file hashing with algorithm selection.
 
-- **Algorithms** - MD5, SHA-1, SHA-256, SHA-512
+- **Algorithm Selection** - Choose All, Quick (MD5+SHA256), or individual
+- **Quick Hash** - Instant SHA-256 with clipboard copy
 - **Verify Hash** - Compare file against known hash
 - **VirusTotal Links** - Quick lookup for malware analysis
-- **Progress Indicator** - For large files
+- **Streaming** - Efficient for large files
 
-### Strings Extractor v1.0.0
-Extract and categorize strings from binary files.
+### Strings Extractor v1.1.0
+Extract and categorize strings with memory-efficient streaming.
 
+- **Streaming Processing** - Handles files of any size (64KB chunks)
 - **ASCII and UTF-16LE** extraction
-- **Auto-categorization**: URLs, IPs, file paths, registry keys, DLLs, Windows API functions, sensitive keywords
+- **Auto-categorization**: URLs, IPs, file paths, registry keys, WinAPI
 - **Configurable minimum length**
 - **Markdown report** with tables
 
