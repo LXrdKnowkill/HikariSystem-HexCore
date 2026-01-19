@@ -2,7 +2,7 @@
 	"name": "hexcore-strings",
 	"displayName": "HexCore Strings Extractor",
 	"description": "Extract ASCII and Unicode strings from binary files for malware analysis",
-	"version": "1.0.0",
+	"version": "1.1.0",
 	"publisher": "hikarisystem",
 	"license": "MIT",
 	"engines": {

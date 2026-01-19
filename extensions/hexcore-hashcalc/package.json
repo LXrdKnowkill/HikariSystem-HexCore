@@ -2,7 +2,7 @@
 	"name": "hexcore-hashcalc",
 	"displayName": "HexCore Hash Calculator",
 	"description": "Calculate MD5, SHA1, SHA256, SHA512 hashes for file integrity verification and malware analysis",
-	"version": "1.0.0",
+	"version": "1.1.0",
 	"publisher": "hikarisystem",
 	"license": "MIT",
 	"engines": {
@@ -26,6 +26,10 @@
 			{
 				"command": "hexcore.hashcalc.calculate",
 				"title": "HexCore: Calculate File Hashes"
+			},
+			{
+				"command": "hexcore.hashcalc.quick",
+				"title": "HexCore: Quick Hash (SHA-256)"
 			},
 			{
 				"command": "hexcore.hashcalc.verify",

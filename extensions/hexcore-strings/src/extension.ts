@@ -1,6 +1,6 @@
 /*---------------------------------------------------------------------------------------------
- *  HexCore Strings Extractor v1.0.0
- *  Extract ASCII and Unicode strings from binary files
+ *  HexCore Strings Extractor v1.1.0
+ *  Extract ASCII and Unicode strings from binary files using streaming
  *  Copyright (c) HikariSystem. All rights reserved.
  *--------------------------------------------------------------------------------------------*/
 
@@ -15,8 +15,11 @@ interface ExtractedString {
 	category?: string;
 }
 
+// Chunk size: 64KB for streaming
+const CHUNK_SIZE = 64 * 1024;
+
 export function activate(context: vscode.ExtensionContext) {
-	console.log('HexCore Strings Extractor extension activated');
+	console.log('HexCore Strings Extractor v1.1.0 activated');
 
 	context.subscriptions.push(
 		vscode.commands.registerCommand('hexcore.strings.extract', async (uri?: vscode.Uri) => {
@@ -49,12 +52,12 @@ export function activate(context: vscode.ExtensionContext) {
 			if (!minLengthInput) return;
 			const minLength = parseInt(minLengthInput);
 
-			await extractAndShowStrings(uri, minLength);
+			await extractStringsWithStreaming(uri, minLength);
 		})
 	);
 }
 
-async function extractAndShowStrings(uri: vscode.Uri, minLength: number): Promise<void> {
+async function extractStringsWithStreaming(uri: vscode.Uri, minLength: number): Promise<void> {
 	const filePath = uri.fsPath;
 	const fileName = path.basename(filePath);
 
@@ -65,41 +68,80 @@ async function extractAndShowStrings(uri: vscode.Uri, minLength: number): Promis
 	}, async (progress, token) => {
 		try {
 			const stats = fs.statSync(filePath);
-			const maxSize = 50 * 1024 * 1024; // Limit to 50MB for performance
+			const totalSize = stats.size;
 
-			if (stats.size > maxSize) {
-				const proceed = await vscode.window.showWarningMessage(
-					`File is ${formatBytes(stats.size)}. Extraction may be slow. Continue?`,
-					'Yes', 'No'
-				);
-				if (proceed !== 'Yes') return;
+			// Use streaming for large files (>10MB) or always for safety
+			const allStrings: ExtractedString[] = [];
+
+			// State for cross-chunk string detection
+			let asciiCarryover = '';
+			let asciiCarryoverOffset = 0;
+			let unicodeCarryover = Buffer.alloc(0);
+			let unicodeCarryoverOffset = 0;
+
+			// Open file for async reading
+			const fd = fs.openSync(filePath, 'r');
+			let offset = 0;
+
+			try {
+				while (offset < totalSize && !token.isCancellationRequested) {
+					const bytesToRead = Math.min(CHUNK_SIZE, totalSize - offset);
+					const buffer = Buffer.alloc(bytesToRead);
+					fs.readSync(fd, buffer, 0, bytesToRead, offset);
+
+					// Extract ASCII strings from chunk
+					const { strings: asciiStrings, carryover: newAsciiCarryover, carryoverOffset: newAsciiOffset } =
+						extractASCIIFromChunk(buffer, offset, minLength, asciiCarryover, asciiCarryoverOffset);
+					allStrings.push(...asciiStrings);
+					asciiCarryover = newAsciiCarryover;
+					asciiCarryoverOffset = newAsciiOffset;
+
+					// Extract Unicode strings from chunk
+					const { strings: unicodeStrings, carryover: newUnicodeCarryover, carryoverOffset: newUnicodeOffset } =
+						extractUnicodeFromChunk(buffer, offset, minLength, unicodeCarryover, unicodeCarryoverOffset);
+					allStrings.push(...unicodeStrings);
+					unicodeCarryover = Buffer.from(newUnicodeCarryover);
+					unicodeCarryoverOffset = newUnicodeOffset;
+
+					offset += bytesToRead;
+
+					// Report progress
+					const pct = Math.round((offset / totalSize) * 100);
+					progress.report({ increment: (bytesToRead / totalSize) * 100, message: `${pct}% - ${allStrings.length} strings found` });
+
+					// Limit total strings to prevent memory issues
+					if (allStrings.length > 50000) {
+						break;
+					}
+				}
+
+				// Handle remaining carryover
+				if (asciiCarryover.length >= minLength) {
+					allStrings.push({
+						offset: asciiCarryoverOffset,
+						value: asciiCarryover.trim(),
+						encoding: 'ASCII'
+					});
+				}
+
+			} finally {
+				fs.closeSync(fd);
 			}
 
-			progress.report({ increment: 0, message: 'Reading file...' });
+			if (token.isCancellationRequested) {
+				vscode.window.showInformationMessage('String extraction cancelled.');
+				return;
+			}
 
-			const buffer = fs.readFileSync(filePath);
-
-			progress.report({ increment: 30, message: 'Extracting ASCII strings...' });
-			if (token.isCancellationRequested) return;
-
-			const asciiStrings = extractASCIIStrings(buffer, minLength);
-
-			progress.report({ increment: 30, message: 'Extracting Unicode strings...' });
-			if (token.isCancellationRequested) return;
-
-			const unicodeStrings = extractUnicodeStrings(buffer, minLength);
-
-			progress.report({ increment: 20, message: 'Categorizing strings...' });
-
-			const allStrings = [...asciiStrings, ...unicodeStrings];
+			// Categorize strings
 			categorizeStrings(allStrings);
 
-			progress.report({ increment: 10, message: 'Generating report...' });
-
-			// Sort by offset
+			// Sort by offset and deduplicate
 			allStrings.sort((a, b) => a.offset - b.offset);
+			const uniqueStrings = deduplicateStrings(allStrings);
 
-			const content = generateStringsReport(fileName, filePath, stats.size, allStrings, minLength);
+			// Generate report
+			const content = generateStringsReport(fileName, filePath, totalSize, uniqueStrings, minLength);
 
 			const doc = await vscode.workspace.openTextDocument({
 				content: content,
@@ -114,82 +156,117 @@ async function extractAndShowStrings(uri: vscode.Uri, minLength: number): Promis
 	});
 }
 
-function extractASCIIStrings(buffer: Buffer, minLength: number): ExtractedString[] {
+interface ChunkResult {
+	strings: ExtractedString[];
+	carryover: string;
+	carryoverOffset: number;
+}
+
+interface UnicodeChunkResult {
+	strings: ExtractedString[];
+	carryover: Buffer;
+	carryoverOffset: number;
+}
+
+function extractASCIIFromChunk(
+	buffer: Buffer,
+	baseOffset: number,
+	minLength: number,
+	carryover: string,
+	carryoverOffset: number
+): ChunkResult {
 	const strings: ExtractedString[] = [];
-	let currentString = '';
-	let startOffset = 0;
+	let currentString = carryover;
+	let startOffset = carryover.length > 0 ? carryoverOffset : baseOffset;
 
 	for (let i = 0; i < buffer.length; i++) {
 		const byte = buffer[i];
 
-		// Printable ASCII range (32-126) plus tab, newline
 		if ((byte >= 32 && byte <= 126) || byte === 9 || byte === 10 || byte === 13) {
 			if (currentString.length === 0) {
-				startOffset = i;
+				startOffset = baseOffset + i;
 			}
 			currentString += String.fromCharCode(byte);
 		} else {
 			if (currentString.length >= minLength) {
-				strings.push({
-					offset: startOffset,
-					value: currentString.trim(),
-					encoding: 'ASCII'
-				});
+				const trimmed = currentString.trim();
+				if (trimmed.length >= minLength) {
+					strings.push({
+						offset: startOffset,
+						value: trimmed,
+						encoding: 'ASCII'
+					});
+				}
 			}
 			currentString = '';
 		}
 	}
 
-	// Don't forget the last string
-	if (currentString.length >= minLength) {
-		strings.push({
-			offset: startOffset,
-			value: currentString.trim(),
-			encoding: 'ASCII'
-		});
-	}
-
-	return strings;
+	return {
+		strings,
+		carryover: currentString,
+		carryoverOffset: startOffset
+	};
 }
 
-function extractUnicodeStrings(buffer: Buffer, minLength: number): ExtractedString[] {
+function extractUnicodeFromChunk(
+	buffer: Buffer,
+	baseOffset: number,
+	minLength: number,
+	carryover: Buffer,
+	carryoverOffset: number
+): UnicodeChunkResult {
 	const strings: ExtractedString[] = [];
+
+	// Combine carryover with new buffer
+	const combined = carryover.length > 0 ? Buffer.concat([carryover, buffer]) : buffer;
+	const combinedOffset = carryover.length > 0 ? carryoverOffset : baseOffset;
+
 	let currentString = '';
-	let startOffset = 0;
+	let startOffset = combinedOffset;
 
-	// UTF-16LE: each char is 2 bytes, with null byte as second for ASCII range
-	for (let i = 0; i < buffer.length - 1; i += 2) {
-		const low = buffer[i];
-		const high = buffer[i + 1];
+	for (let i = 0; i < combined.length - 1; i += 2) {
+		const low = combined[i];
+		const high = combined[i + 1];
 
-		// Check for printable UTF-16LE character
 		if (high === 0 && ((low >= 32 && low <= 126) || low === 9 || low === 10 || low === 13)) {
 			if (currentString.length === 0) {
-				startOffset = i;
+				startOffset = combinedOffset + i - (carryover.length > 0 ? carryover.length : 0) + baseOffset;
 			}
 			currentString += String.fromCharCode(low);
 		} else {
 			if (currentString.length >= minLength) {
-				// Avoid duplicates with ASCII extraction
-				strings.push({
-					offset: startOffset,
-					value: currentString.trim(),
-					encoding: 'UTF-16LE'
-				});
+				const trimmed = currentString.trim();
+				if (trimmed.length >= minLength) {
+					strings.push({
+						offset: startOffset,
+						value: trimmed,
+						encoding: 'UTF-16LE'
+					});
+				}
 			}
 			currentString = '';
 		}
 	}
 
-	if (currentString.length >= minLength) {
-		strings.push({
-			offset: startOffset,
-			value: currentString.trim(),
-			encoding: 'UTF-16LE'
-		});
-	}
+	// Handle odd byte at end
+	const newCarryover = combined.length % 2 === 1 ? Buffer.from(combined.subarray(-1)) : Buffer.alloc(0);
 
-	return strings;
+	return {
+		strings,
+		carryover: newCarryover,
+		carryoverOffset: baseOffset + buffer.length - 1
+	};
+}
+
+function deduplicateStrings(strings: ExtractedString[]): ExtractedString[] {
+	const seen = new Set<string>();
+	return strings.filter(s => {
+		const key = `${s.offset}-${s.value.substring(0, 50)}`;
+		if (seen.has(key)) return false;
+		seen.add(key);
+		return true;
+	});
 }
 
 function categorizeStrings(strings: ExtractedString[]): void {
@@ -246,6 +323,7 @@ function generateStringsReport(
 | **File Path** | ${filePath} |
 | **File Size** | ${formatBytes(fileSize)} |
 | **Min Length** | ${minLength} characters |
+| **Processing** | Streaming (memory efficient) |
 
 ---
 
@@ -272,8 +350,8 @@ function generateStringsReport(
 			report += `### ${cat} (${items.length})\n\n`;
 			report += '| Offset | Encoding | Value |\n';
 			report += '|--------|----------|-------|\n';
-			for (const item of items.slice(0, 50)) { // Limit per category
-				const escapedValue = item.value.replace(/\|/g, '\\|').replace(/\n/g, ' ');
+			for (const item of items.slice(0, 50)) {
+				const escapedValue = item.value.replace(/\|/g, '\\|').replace(/\n/g, ' ').substring(0, 80);
 				report += `| 0x${item.offset.toString(16).toUpperCase().padStart(8, '0')} | ${item.encoding} | \`${escapedValue}\` |\n`;
 			}
 			if (items.length > 50) {
@@ -298,7 +376,7 @@ function generateStringsReport(
 	}
 
 	report += `---
-*Generated by HexCore Strings Extractor v1.0.0*
+*Generated by HexCore Strings Extractor v1.1.0 (Streaming)*
 `;
 
 	return report;
