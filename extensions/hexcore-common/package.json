@@ -5,6 +5,9 @@
 	"version": "1.0.0",
 	"publisher": "hikarisystem",
 	"license": "MIT",
+	"engines": {
+		"vscode": "^1.70.0"
+	},
 	"main": "./out/index.js",
 	"types": "./out/index.d.ts",
 	"scripts": {
