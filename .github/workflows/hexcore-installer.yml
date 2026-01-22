@@ -56,30 +56,41 @@ jobs:
       - name: Install extensions shared dependencies
         run: cd extensions && npm ci --ignore-scripts
 
-      - name: Install extension production dependencies
+      - name: Install extension dependencies
         run: |
-          cd extensions/markdown-math && npm ci --ignore-scripts
-          cd ../markdown-language-features && npm ci --ignore-scripts
-          cd ../typescript-language-features && npm ci --ignore-scripts
-          cd ../html-language-features && npm ci --ignore-scripts
+          cd extensions/configuration-editing && npm ci --ignore-scripts
+          cd ../css-language-features && npm ci --ignore-scripts
           cd ./server && npm ci --ignore-scripts
-          cd ../../css-language-features && npm ci --ignore-scripts
-          cd ./server && npm ci --ignore-scripts
-          cd ../../json-language-features && npm ci --ignore-scripts
-          cd ./server && npm ci --ignore-scripts
-          cd ../../emmet && npm ci --ignore-scripts
+          cd ../../debug-auto-launch && npm ci --ignore-scripts
+          cd ../debug-server-ready && npm ci --ignore-scripts
+          cd ../emmet && npm ci --ignore-scripts
+          cd ../extension-editing && npm ci --ignore-scripts
           cd ../git && npm ci --ignore-scripts
+          cd ../git-base && npm ci --ignore-scripts
           cd ../github && npm ci --ignore-scripts
           cd ../github-authentication && npm ci --ignore-scripts
-          cd ../npm && npm ci --ignore-scripts
-          cd ../configuration-editing && npm ci --ignore-scripts
-          cd ../extension-editing && npm ci --ignore-scripts
-          cd ../ipynb && npm ci --ignore-scripts
+          cd ../grunt && npm ci --ignore-scripts
+          cd ../gulp && npm ci --ignore-scripts
+          cd ../html-language-features && npm ci --ignore-scripts
+          cd ./server && npm ci --ignore-scripts
+          cd ../../ipynb && npm ci --ignore-scripts
+          cd ../jake && npm ci --ignore-scripts
+          cd ../json-language-features && npm ci --ignore-scripts
+          cd ./server && npm ci --ignore-scripts
+          cd ../../markdown-language-features && npm ci --ignore-scripts
+          cd ../markdown-math && npm ci --ignore-scripts
           cd ../media-preview && npm ci --ignore-scripts
           cd ../merge-conflict && npm ci --ignore-scripts
           cd ../mermaid-chat-features && npm ci --ignore-scripts
           cd ../microsoft-authentication && npm ci --ignore-scripts
+          cd ../npm && npm ci --ignore-scripts
+          cd ../php-language-features && npm ci --ignore-scripts
+          cd ../references-view && npm ci --ignore-scripts
+          cd ../search-result && npm ci --ignore-scripts
           cd ../simple-browser && npm ci --ignore-scripts
+          cd ../terminal-suggest && npm ci --ignore-scripts
+          cd ../tunnel-forwarding && npm ci --ignore-scripts
+          cd ../typescript-language-features && npm ci --ignore-scripts
 
       - name: Compile HexCore Extensions
         run: |
@@ -154,30 +165,41 @@ jobs:
       - name: Install extensions shared dependencies
         run: cd extensions && npm ci --ignore-scripts
 
-      - name: Install extension production dependencies
+      - name: Install extension dependencies
         run: |
-          cd extensions/markdown-math && npm ci --ignore-scripts
-          cd ../markdown-language-features && npm ci --ignore-scripts
-          cd ../typescript-language-features && npm ci --ignore-scripts
-          cd ../html-language-features && npm ci --ignore-scripts
+          cd extensions/configuration-editing && npm ci --ignore-scripts
+          cd ../css-language-features && npm ci --ignore-scripts
           cd ./server && npm ci --ignore-scripts
-          cd ../../css-language-features && npm ci --ignore-scripts
-          cd ./server && npm ci --ignore-scripts
-          cd ../../json-language-features && npm ci --ignore-scripts
-          cd ./server && npm ci --ignore-scripts
-          cd ../../emmet && npm ci --ignore-scripts
+          cd ../../debug-auto-launch && npm ci --ignore-scripts
+          cd ../debug-server-ready && npm ci --ignore-scripts
+          cd ../emmet && npm ci --ignore-scripts
+          cd ../extension-editing && npm ci --ignore-scripts
           cd ../git && npm ci --ignore-scripts
+          cd ../git-base && npm ci --ignore-scripts
           cd ../github && npm ci --ignore-scripts
           cd ../github-authentication && npm ci --ignore-scripts
-          cd ../npm && npm ci --ignore-scripts
-          cd ../configuration-editing && npm ci --ignore-scripts
-          cd ../extension-editing && npm ci --ignore-scripts
-          cd ../ipynb && npm ci --ignore-scripts
+          cd ../grunt && npm ci --ignore-scripts
+          cd ../gulp && npm ci --ignore-scripts
+          cd ../html-language-features && npm ci --ignore-scripts
+          cd ./server && npm ci --ignore-scripts
+          cd ../../ipynb && npm ci --ignore-scripts
+          cd ../jake && npm ci --ignore-scripts
+          cd ../json-language-features && npm ci --ignore-scripts
+          cd ./server && npm ci --ignore-scripts
+          cd ../../markdown-language-features && npm ci --ignore-scripts
+          cd ../markdown-math && npm ci --ignore-scripts
           cd ../media-preview && npm ci --ignore-scripts
           cd ../merge-conflict && npm ci --ignore-scripts
           cd ../mermaid-chat-features && npm ci --ignore-scripts
           cd ../microsoft-authentication && npm ci --ignore-scripts
+          cd ../npm && npm ci --ignore-scripts
+          cd ../php-language-features && npm ci --ignore-scripts
+          cd ../references-view && npm ci --ignore-scripts
+          cd ../search-result && npm ci --ignore-scripts
           cd ../simple-browser && npm ci --ignore-scripts
+          cd ../terminal-suggest && npm ci --ignore-scripts
+          cd ../tunnel-forwarding && npm ci --ignore-scripts
+          cd ../typescript-language-features && npm ci --ignore-scripts
 
       - name: Compile HexCore Extensions
         run: |
