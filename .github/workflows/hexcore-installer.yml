@@ -53,6 +53,34 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Install extensions shared dependencies
+        run: cd extensions && npm ci --ignore-scripts
+
+      - name: Install extension production dependencies
+        run: |
+          cd extensions/markdown-math && npm ci --ignore-scripts
+          cd ../markdown-language-features && npm ci --ignore-scripts
+          cd ../typescript-language-features && npm ci --ignore-scripts
+          cd ../html-language-features && npm ci --ignore-scripts
+          cd ./server && npm ci --ignore-scripts
+          cd ../../css-language-features && npm ci --ignore-scripts
+          cd ./server && npm ci --ignore-scripts
+          cd ../../json-language-features && npm ci --ignore-scripts
+          cd ./server && npm ci --ignore-scripts
+          cd ../../emmet && npm ci --ignore-scripts
+          cd ../git && npm ci --ignore-scripts
+          cd ../github && npm ci --ignore-scripts
+          cd ../github-authentication && npm ci --ignore-scripts
+          cd ../npm && npm ci --ignore-scripts
+          cd ../configuration-editing && npm ci --ignore-scripts
+          cd ../extension-editing && npm ci --ignore-scripts
+          cd ../ipynb && npm ci --ignore-scripts
+          cd ../media-preview && npm ci --ignore-scripts
+          cd ../merge-conflict && npm ci --ignore-scripts
+          cd ../mermaid-chat-features && npm ci --ignore-scripts
+          cd ../microsoft-authentication && npm ci --ignore-scripts
+          cd ../simple-browser && npm ci --ignore-scripts
+
       - name: Compile HexCore Extensions
         run: |
           cd extensions/hexcore-hexviewer && npm ci && npm run compile
@@ -122,6 +150,34 @@ jobs:
           cd build && npm ci
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install extensions shared dependencies
+        run: cd extensions && npm ci --ignore-scripts
+
+      - name: Install extension production dependencies
+        run: |
+          cd extensions/markdown-math && npm ci --ignore-scripts
+          cd ../markdown-language-features && npm ci --ignore-scripts
+          cd ../typescript-language-features && npm ci --ignore-scripts
+          cd ../html-language-features && npm ci --ignore-scripts
+          cd ./server && npm ci --ignore-scripts
+          cd ../../css-language-features && npm ci --ignore-scripts
+          cd ./server && npm ci --ignore-scripts
+          cd ../../json-language-features && npm ci --ignore-scripts
+          cd ./server && npm ci --ignore-scripts
+          cd ../../emmet && npm ci --ignore-scripts
+          cd ../git && npm ci --ignore-scripts
+          cd ../github && npm ci --ignore-scripts
+          cd ../github-authentication && npm ci --ignore-scripts
+          cd ../npm && npm ci --ignore-scripts
+          cd ../configuration-editing && npm ci --ignore-scripts
+          cd ../extension-editing && npm ci --ignore-scripts
+          cd ../ipynb && npm ci --ignore-scripts
+          cd ../media-preview && npm ci --ignore-scripts
+          cd ../merge-conflict && npm ci --ignore-scripts
+          cd ../mermaid-chat-features && npm ci --ignore-scripts
+          cd ../microsoft-authentication && npm ci --ignore-scripts
+          cd ../simple-browser && npm ci --ignore-scripts
 
       - name: Compile HexCore Extensions
         run: |
