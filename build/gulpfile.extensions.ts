@@ -72,6 +72,16 @@ const compilations = [
 	'extensions/vscode-colorize-perf-tests/tsconfig.json',
 	'extensions/vscode-test-resolver/tsconfig.json',
 
+	// HexCore extensions
+	'extensions/hexcore-base64/tsconfig.json',
+	'extensions/hexcore-common/tsconfig.json',
+	'extensions/hexcore-entropy/tsconfig.json',
+	'extensions/hexcore-filetype/tsconfig.json',
+	'extensions/hexcore-hashcalc/tsconfig.json',
+	'extensions/hexcore-hexviewer/tsconfig.json',
+	'extensions/hexcore-peanalyzer/tsconfig.json',
+	'extensions/hexcore-strings/tsconfig.json',
+
 	'.vscode/extensions/vscode-selfhost-test-provider/tsconfig.json',
 	'.vscode/extensions/vscode-selfhost-import-aid/tsconfig.json',
 ];

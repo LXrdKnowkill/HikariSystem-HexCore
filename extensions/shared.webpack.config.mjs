@@ -14,12 +14,19 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 
-const tsLoaderOptions = {
-	compilerOptions: {
-		'sourceMap': true,
-	},
-	onlyCompileBundledFiles: true,
-};
+/**
+ * Generate ts-loader options with proper rootDir for TypeScript 6.0+ compatibility
+ * @param {string} context - The extension context directory
+ */
+function getTsLoaderOptions(context) {
+	return {
+		compilerOptions: {
+			'sourceMap': true,
+			'rootDir': path.join(context, 'src'),
+		},
+		onlyCompileBundledFiles: true,
+	};
+}
 
 function withNodeDefaults(/**@type WebpackConfig & { context: string }*/extConfig) {
 	const defaultConfig = {
@@ -47,7 +54,7 @@ function withNodeDefaults(/**@type WebpackConfig & { context: string }*/extConfi
 						// configure TypeScript loader:
 						// * enable sources maps for end-to-end source maps
 						loader: 'ts-loader',
-						options: tsLoaderOptions
+						options: getTsLoaderOptions(extConfig.context)
 					},
 					// disable mangling for now, SEE https://github.com/microsoft/vscode/issues/204692
 					// {
@@ -135,7 +142,7 @@ function withBrowserDefaults(/**@type WebpackConfig & { context: string }*/extCo
 						// * enable sources maps for end-to-end source maps
 						loader: 'ts-loader',
 						options: {
-							...tsLoaderOptions,
+							...getTsLoaderOptions(extConfig.context),
 							//							...(additionalOptions ? {} : { configFile: additionalOptions.configFile }),
 						}
 					},

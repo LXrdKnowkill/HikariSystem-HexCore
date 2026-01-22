@@ -19,6 +19,9 @@
 		"forensics"
 	],
 	"main": "./out/extension.js",
+	"activationEvents": [
+		"onCommand:hexcore.strings.extract"
+	],
 	"contributes": {
 		"commands": [
 			{

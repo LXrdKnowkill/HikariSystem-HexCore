@@ -21,6 +21,11 @@
 		"malware"
 	],
 	"main": "./out/extension.js",
+	"activationEvents": [
+		"onCommand:hexcore.hashcalc.calculate",
+		"onCommand:hexcore.hashcalc.quick",
+		"onCommand:hexcore.hashcalc.verify"
+	],
 	"contributes": {
 		"commands": [
 			{

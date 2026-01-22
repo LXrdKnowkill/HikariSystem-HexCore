@@ -19,6 +19,9 @@
 		"analysis"
 	],
 	"main": "./out/extension.js",
+	"activationEvents": [
+		"onCommand:hexcore.entropy.analyze"
+	],
 	"contributes": {
 		"commands": [
 			{

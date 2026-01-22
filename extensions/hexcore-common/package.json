@@ -10,6 +10,7 @@
 	},
 	"main": "./out/index.js",
 	"types": "./out/index.d.ts",
+	"activationEvents": [],
 	"scripts": {
 		"compile": "tsc -p ./",
 		"watch": "tsc -watch -p ./"

@@ -19,6 +19,9 @@
 		"obfuscation"
 	],
 	"main": "./out/extension.js",
+	"activationEvents": [
+		"onCommand:hexcore.base64.decode"
+	],
 	"contributes": {
 		"commands": [
 			{

@@ -19,6 +19,9 @@
 		"forensics"
 	],
 	"main": "./out/extension.js",
+	"activationEvents": [
+		"onCommand:hexcore.filetype.detect"
+	],
 	"contributes": {
 		"commands": [
 			{
