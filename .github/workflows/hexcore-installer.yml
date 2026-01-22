@@ -47,6 +47,9 @@ jobs:
           ELECTRON_SKIP_BINARY_DOWNLOAD: 0
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
 
+      - name: Rebuild native modules
+        run: npm rebuild
+
       - name: Install build dependencies
         run: |
           cd build && npm ci
@@ -155,6 +158,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ELECTRON_SKIP_BINARY_DOWNLOAD: 0
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+
+      - name: Rebuild native modules
+        run: npm rebuild
 
       - name: Install build dependencies
         run: |
