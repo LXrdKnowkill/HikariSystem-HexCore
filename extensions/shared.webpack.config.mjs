@@ -19,10 +19,19 @@ const require = createRequire(import.meta.url);
  * @param {string} context - The extension context directory
  */
 function getTsLoaderOptions(context) {
+	// Build typeRoots array - include both local and root node_modules/@types
+	// This ensures types are found even when extension's node_modules aren't installed
+	const typeRoots = [
+		path.join(context, 'node_modules', '@types'),
+		path.join(import.meta.dirname, 'node_modules', '@types'),
+		path.join(import.meta.dirname, '..', 'node_modules', '@types'),
+	].filter(p => fs.existsSync(p));
+
 	return {
 		compilerOptions: {
 			'sourceMap': true,
 			'rootDir': path.join(context, 'src'),
+			'typeRoots': typeRoots.length > 0 ? typeRoots : undefined,
 		},
 		onlyCompileBundledFiles: true,
 	};
