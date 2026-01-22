@@ -111,6 +111,8 @@ node-pty/third_party/**
 !node-pty/build/Release/*.node
 !node-pty/build/Release/conpty/conpty.dll
 !node-pty/build/Release/conpty/OpenConsole.exe
+# node-pty prebuilds - platform-specific filtering done in .moduleignore.<platform>
+!node-pty/prebuilds/**
 
 @parcel/watcher/binding.gyp
 @parcel/watcher/build/**

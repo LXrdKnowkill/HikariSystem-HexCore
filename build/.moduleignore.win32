@@ -1,0 +1,4 @@
+# Exclude node-pty prebuilds for non-Windows platforms
+node-pty/prebuilds/linux-*/**
+node-pty/prebuilds/darwin-*/**
+node-pty/prebuilds/android-*/**

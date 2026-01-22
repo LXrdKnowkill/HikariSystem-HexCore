@@ -1,3 +1,8 @@
+# Exclude node-pty prebuilds for non-Linux platforms
+node-pty/prebuilds/win32-*/**
+node-pty/prebuilds/darwin-*/**
+node-pty/prebuilds/android-*/**
+
 @vscode/windows-mutex/index.js
 @vscode/windows-mutex/**/*.node
 @vscode/windows-mutex/*.md
